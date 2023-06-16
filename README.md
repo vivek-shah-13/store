@@ -20,6 +20,8 @@ mysql> use store;
 ### We should have create commands for customers, products, and orders:
 
   1. Command Syntax: `store create-customer <email> <state>`
+
+
 This command should add a new customer to the customers table.
 The email and state arguments are required. 
     
@@ -31,6 +33,8 @@ Example:
 
   
 2. Command Syntax: `store create-product [--sku=<sku>] <name> <price>`
+
+
 This command should add a new product to the products table.
 The name and price arguments are required. 
 The sku flag is optional. 
@@ -46,6 +50,8 @@ Examples:
     1  
 
 3. Command Syntax: `store create-order <customer_id> <product_id>`
+
+
 This command should add a new order to the orders table.
 The customer_id and product_id arguments are required. 
 
@@ -59,6 +65,8 @@ Example:
  ### We should have show commands for customers, products, and orders:
 
 1. Command syntax: `store show-orders [--name=<name>]`
+
+
 This command should display all of the orders in the orders table. 
 This command should have an optional --name flag which allows users to filter by name. 
 This parameter should support wildcard matching (e.g. 'foo%')
@@ -76,6 +84,8 @@ Examples:
       2                 Milk        4.50       
 
 2. Command Syntax: `store show-customers [--email=<email>] [--state=<state>]`   
+
+
 Show customers should display all of the customers in the customers table. 
 This command should have an optional --email flag which allows users to filter by email. 
 This command should have an optional --state flag which allows users to filter by state.
@@ -100,6 +110,8 @@ Examples:
     2                 kevin.kerr@outreach.io      WA  
 
 3. Command Syntax: `store show-orders [--customer-id=<customer_id>] [--product-id=<product_id>]`
+
+
 Show orders should displays all of the orders in the orders table. 
 This command should have an optional --product-id flag which allows users to filter by products. 
 This should have an optional --customer-id flag which allows users to filter by customers. 
