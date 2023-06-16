@@ -46,8 +46,8 @@ Examples:
     1                 Bananas     3.99      
 
     > store create-product --sku aa1 Bananas 3.99 
-    PRODUCT_ID        NAME       PRICE       SKU
-    1  
+    PRODUCT_ID        NAME       PRICE      SKU
+    1                 Bananas     3.99      aa1
 
 3. Command Syntax: `store create-order <customer_id> <product_id>`
 
@@ -82,6 +82,7 @@ Examples:
       > store show-products --name "M%"
       PRODUCT_ID        NAME       PRICE       SKU
       2                 Milk        4.50       
+      5                 Markers     8.99       xi1          
 
 2. Command Syntax: `store show-customers [--email=<email>] [--state=<state>]`   
 
