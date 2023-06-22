@@ -380,11 +380,11 @@ func ordersHelper(w *tabwriter.Writer, db *sql.DB, statement string, args []any,
 	var rows *sql.Rows
 	var err error
 	if len(args) == 1 {
-		rows, err = db.QueryContext(ctx, statement, args[0])
+		rows, err = db.QueryContext(ctx, statement, args)
 	} else if len(args) == 2 {
-		rows, err = db.QueryContext(ctx, statement, args[0], args[1])
+		rows, err = db.QueryContext(ctx, statement, args)
 	} else {
-		rows, err = db.QueryContext(ctx, statement)
+		rows, err = db.QueryContext(ctx, statement, args)
 	}
 	if err != nil {
 		return err
@@ -504,4 +504,5 @@ func productsInsertHelper(db *sql.DB, args []any, statement string, w *tabwriter
 	fmt.Fprintf(w, "%d\t%s\t%v\t%v\t\n", productId, args[0], args[1], args[2])
 	w.Flush()
 	return nil
+
 }
