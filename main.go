@@ -380,11 +380,11 @@ func ordersHelper(w *tabwriter.Writer, db *sql.DB, statement string, args []any,
 	var rows *sql.Rows
 	var err error
 	if len(args) == 1 {
-		rows, err = db.QueryContext(ctx, statement, args)
+		rows, err = db.QueryContext(ctx, statement, args[0])
 	} else if len(args) == 2 {
-		rows, err = db.QueryContext(ctx, statement, args)
+		rows, err = db.QueryContext(ctx, statement, args[1], args[2])
 	} else {
-		rows, err = db.QueryContext(ctx, statement, args)
+		rows, err = db.QueryContext(ctx, statement)
 	}
 	if err != nil {
 		return err
