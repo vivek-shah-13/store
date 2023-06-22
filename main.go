@@ -48,7 +48,7 @@ func NewCustomer(rows *sql.Rows) (*Customer, error) {
 }
 
 func (c *Customer) Print(w *tabwriter.Writer) {
-	fmt.Fprintf(w, "%d\t%v\t%v\n", c.ID, c.Email, c.State)
+	fmt.Fprintf(w, "%-*v\t%-*s\t%-*s\n", 3, c.ID, 50, c.Email, 2, c.State)
 }
 
 func NewProduct(rows *sql.Rows) (*Product, error) {
@@ -186,9 +186,9 @@ func newCreateCustomerCommand(db *sql.DB) *cli.Command {
 			if err != nil {
 				return err
 			}
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
-			fmt.Fprintln(w, "Customer_id\tEmail\tState\t")
-			fmt.Fprintf(w, "%d\t%s\t%s\t\n", customerID, email, state)
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
+			fmt.Fprintf(w, "%-*s\t%-*s\t%-*s\n", 3, "ID", 50, "Email", 2, "State")
+			fmt.Fprintf(w, "%-*v\t%-*s\t%-*s\n", 3, customerID, 50, email, 2, state)
 			w.Flush()
 
 			return nil
@@ -209,13 +209,6 @@ func main() {
 		Name: "store",
 		Commands: []*cli.Command{
 			newCreateCustomerCommand(db),
-			// {
-			// 	Name:  "create-customer",
-			// 	Usage: "Creates a new customer to go in the customers database, must specify email and state(2 letter code)",
-			// 	Action: func(cCtx *cli.Context) error {
-			// 		return createCustomer(cCtx, db)
-			// 	},
-			// },
 			{
 				Name:  "create-product",
 				Usage: "Creates a new product to go in the products database, must specify name and price",
@@ -231,7 +224,7 @@ func main() {
 					}
 
 					name := cCtx.Args().Get(0)
-					price, err := strconv.Atoi(cCtx.Args().Get(1))
+					price, err := strconv.ParseFloat(cCtx.Args().Get(1), 32)
 					if err != nil {
 						return err
 					}
@@ -264,14 +257,14 @@ func main() {
 				Usage:     "Creates a new order to go in the order database, must specify customer_id and product_id",
 				ArgsUsage: "PRODUCT_ID CUSTOMER_ID",
 				Action: func(cCtx *cli.Context) error {
-					if len(os.Args) != 4 {
+					if cCtx.NArg() < 2 {
 						return errors.New("Must specify product_id and customer_id")
 					}
-					pID, err := strconv.Atoi(os.Args[2])
+					pID, err := strconv.Atoi(cCtx.Args().Get(0))
 					if err != nil {
 						return err
 					}
-					cID, err := strconv.Atoi(os.Args[3])
+					cID, err := strconv.Atoi(cCtx.Args().Get(1))
 					if err != nil {
 						return err
 					}
@@ -496,7 +489,7 @@ func customerHelper(w *tabwriter.Writer, db *sql.DB, statement string, email str
 }
 
 func customersPrintHelper(customers []*Customer, w *tabwriter.Writer) error {
-	fmt.Fprintln(w, "Customer_id\tEmail\tState")
+	fmt.Fprintf(w, "%-*s\t%-*s\t%-*s\n", 3, "ID", 50, "Email", 2, "State")
 	for _, c := range customers {
 		c.Print(w)
 	}
