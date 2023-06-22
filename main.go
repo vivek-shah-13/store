@@ -138,10 +138,7 @@ var states = map[string]bool{
 	"WY": true,
 }
 
-func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-	defer cancel()
-
+func connectDB() (*sql.DB, error) {
 	cfg := mysql.Config{
 		User:   "admin",
 		Passwd: "password123",
@@ -151,51 +148,74 @@ func main() {
 
 	db, err := sql.Open("mysql", cfg.FormatDSN())
 	if err != nil {
-		log.Fatal("failed to open database:", err)
+		return nil, err
 	}
 
 	if err := db.Ping(); err != nil {
-		log.Fatal("failed to connect to database:", err)
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func newCreateCustomerCommand(db *sql.DB) *cli.Command {
+	return &cli.Command{
+		Name:  "create-customer",
+		Usage: "Creates a new customer to go in the customers database, must specify email and state(2 letter code)",
+		Action: func(cCtx *cli.Context) error {
+			if cCtx.NArg() < 2 {
+				return errors.New("Must specify email and state")
+			}
+			email := cCtx.Args().Get(0)
+			state := cCtx.Args().Get(1)
+			if len(state) != 2 {
+				return errors.New("State length must be 2")
+			}
+			_, ok := states[strings.ToUpper(state)]
+			if !ok {
+				return errors.New("State must be a valid U.S. State or Territory")
+			}
+
+			insertStatement := "INSERT INTO Customers (email, state) VALUES (?, ?)"
+			res, err := db.Exec(insertStatement, email, state)
+
+			if err != nil {
+				return err
+			}
+			customerID, err := res.LastInsertId()
+			if err != nil {
+				return err
+			}
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
+			fmt.Fprintln(w, "Customer_id\tEmail\tState\t")
+			fmt.Fprintf(w, "%d\t%s\t%s\t\n", customerID, email, state)
+			w.Flush()
+
+			return nil
+		},
+	}
+}
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	db, err := connectDB()
+	if err != nil {
+		log.Fatal("failed to open database:", err)
 	}
 
 	app := &cli.App{
 		Name: "store",
 		Commands: []*cli.Command{
-			{
-				Name:  "create-customer",
-				Usage: "Creates a new customer to go in the customers database, must specify email and state(2 letter code)",
-				Action: func(cCtx *cli.Context) error {
-					if cCtx.NArg() < 2 {
-						return errors.New("Must specify email and state")
-					}
-					email := cCtx.Args().Get(0)
-					state := cCtx.Args().Get(1)
-					if len(state) != 2 {
-						return errors.New("State length must be 2")
-					}
-					_, ok := states[strings.ToUpper(state)]
-					if !ok {
-						return errors.New("State must be a valid U.S. State or Territory")
-					}
-
-					insertStatement := "INSERT INTO Customers (email, state) VALUES (?, ?)"
-					res, err := db.Exec(insertStatement, email, state)
-
-					if err != nil {
-						return err
-					}
-					customerID, err := res.LastInsertId()
-					if err != nil {
-						return err
-					}
-					w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
-					fmt.Fprintln(w, "Customer_id\tEmail\tState\t")
-					fmt.Fprintf(w, "%d\t%s\t%s\t\n", customerID, email, state)
-					w.Flush()
-
-					return nil
-				},
-			},
+			newCreateCustomerCommand(db),
+			// {
+			// 	Name:  "create-customer",
+			// 	Usage: "Creates a new customer to go in the customers database, must specify email and state(2 letter code)",
+			// 	Action: func(cCtx *cli.Context) error {
+			// 		return createCustomer(cCtx, db)
+			// 	},
+			// },
 			{
 				Name:  "create-product",
 				Usage: "Creates a new product to go in the products database, must specify name and price",
@@ -240,8 +260,9 @@ func main() {
 				},
 			},
 			{
-				Name:  "create-order",
-				Usage: "Creates a new order to go in the order database, must specify customer_id and product_id",
+				Name:      "create-order",
+				Usage:     "Creates a new order to go in the order database, must specify customer_id and product_id",
+				ArgsUsage: "PRODUCT_ID CUSTOMER_ID",
 				Action: func(cCtx *cli.Context) error {
 					if len(os.Args) != 4 {
 						return errors.New("Must specify product_id and customer_id")
