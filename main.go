@@ -38,27 +38,26 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 	}
 
 	sort.Slice(files, func(i, j int) bool {
-		id1 := extractMigrationID(files[i])
-		id2 := extractMigrationID(files[j])
+		id1, err := extractMigrationID(files[i])
+		if err != nil {
+			log.Fatal(err)
+		}
+		id2, err := extractMigrationID(files[j])
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		return id1 < id2
 	})
-
-	// var index int = 0
-	// for _, file := range files {
-	// 	if extractMigrationID(file) <= lastRanId {
-	// 		index++
-	// 	}
-	// }
 
 	fileSlice := files[lastRanId+1:]
 
 	for _, file := range fileSlice {
 		readFile, err := os.Open(file)
-
 		if err != nil {
-			fmt.Println(err)
+			return err
 		}
+		defer readFile.Close()
 		fileScanner := bufio.NewScanner(readFile)
 
 		fileScanner.Split(bufio.ScanLines)
@@ -71,28 +70,26 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 				return fmt.Errorf("failed to execute migration %s: %w", file, err)
 			}
 		}
-
-		readFile.Close()
-
 		log.Printf("Executed migration: %s\n", file)
 	}
 
 	return nil
 }
 
-func extractMigrationID(file string) int {
+func extractMigrationID(file string) (int, error) {
 	regex := regexp.MustCompile(`_(\d+)\.sql$`)
 	matches := regex.FindStringSubmatch(file)
+
 	if len(matches) != 2 {
-		return -1
+		return -1, errors.New("Didn't find match")
 	}
 
 	id, err := strconv.Atoi(matches[1])
 	if err != nil {
-		return -1
+		return -1, errors.New("Couldn't convert to integer")
 	}
 
-	return id
+	return id, nil
 }
 
 func (m *MigrationRunner) loadMigrationFiles() ([]string, error) {
