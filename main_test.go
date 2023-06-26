@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
+	"log"
+	"os"
 	"testing"
 	"time"
 
@@ -91,11 +93,17 @@ func createCustomersData(args [][]string) error {
 	return nil
 }
 
-func createCustomersDataV2(args [][]string) {
+func createCustomersDataV2(t *testing.T, args [][]string) {
 
-	db, _ := connectDB()
+	db, err := connectDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, val := range args {
-		db.Exec("INSERT INTO Customers (email, state) VALUES (?, ?)", val[0], val[1])
+		_, err = db.Exec("INSERT INTO Customers (email, state) VALUES (?, ?)", val[0], val[1])
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 }
@@ -120,10 +128,16 @@ func createProductsData(args [][]string) error {
 	return nil
 }
 
-func createProductsDataV2(args [][]any) {
-	db, _ := connectDB()
+func createProductsDataV2(t *testing.T, args [][]any) {
+	db, err := connectDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, val := range args {
-		db.Exec("INSERT INTO Products (name, price, sku) VALUES (?, ?, ?)", val[0], val[1], val[2])
+		_, err = db.Exec("INSERT INTO Products (name, price, sku) VALUES (?, ?, ?)", val[0], val[1], val[2])
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 func createOrdersData(customers [][]string, products [][]string, orders [][]string) error {
@@ -156,13 +170,27 @@ func createOrdersData(customers [][]string, products [][]string, orders [][]stri
 	return nil
 }
 
-func createOrdersDataV2(args [][]int) {
-	db, _ := connectDB()
-	for _, val := range args {
-		db.Exec("INSERT INTO Customers (email, state) VALUES ('vivek.shah@outreach.io', 'WA')")
-		db.Exec("INSERT INTO Products (name, price, sku) VALUES ('laptop', 25.5, 'abcde')")
-		db.Exec("INSERT INTO Orders (customer_id, product_id) VALUES (?, ?)", val[0], val[1])
+func createOrdersDataV2(t *testing.T, args [][]int) {
+	db, err := connectDB()
+	if err != nil {
+		t.Fatal(err)
 	}
+	for _, val := range args {
+		_, err = db.Exec("INSERT INTO Customers (email, state) VALUES ('vivek.shah@outreach.io', 'WA')")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = db.Exec("INSERT INTO Products (name, price, sku) VALUES ('laptop', 25.5, 'abcde')")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = db.Exec("INSERT INTO Orders (customer_id, product_id) VALUES (?, ?)", val[0], val[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+
+	}
+
 }
 
 // ### We should have create commands for customers
@@ -254,7 +282,7 @@ func TestCreateMultipleCustomer_withValidInput_entersDatabaseCorrectly(t *testin
 }
 
 func Example_CreateCustomer_hasCorrectPrintOutput() {
-	printCustomer(1, "vivek.s@outreach.io", "WA")
+	printCustomer(os.Stdout, &Customer{1, "vivek.s@outreach.io", "WA"})
 
 	//Output:
 	//ID  |Email                                              |State |
@@ -263,8 +291,8 @@ func Example_CreateCustomer_hasCorrectPrintOutput() {
 }
 
 func Example_CreateMultipleCustomer_hasCorrectPrintOutput() {
-	printCustomer(1, "vivek.s@outreach.io", "WA")
-	printCustomer(2, "v.s@verylonglonglonglongemail.com", "MN")
+	printCustomer(os.Stdout, &Customer{1, "vivek.s@outreach.io", "WA"})
+	printCustomer(os.Stdout, &Customer{2, "v.s@verylonglonglonglongemail.com", "MN"})
 	//Output:
 	//ID  |Email                                              |State |
 	//1   |vivek.s@outreach.io                                |WA    |
@@ -308,8 +336,9 @@ func TestCreateProduct_noPrice(t *testing.T) {
 }
 
 func TestCreateProduct_validInputNoSku(t *testing.T) {
-	db, _ := connectDB()
-	err := tearDownProducts()
+	db, err := connectDB()
+	assert.NilError(t, err)
+	err = tearDownProducts()
 	assert.NilError(t, err)
 	err = createProductsData([][]string{{"store", "create-product", "banana", "5"}})
 	assert.NilError(t, err)
@@ -375,20 +404,20 @@ func TestCreateProduct_decimalPrice(t *testing.T) {
 }
 
 func Example_CreateProduct_CorrectOutputWithSku() {
-	printProduct(1, "laptop", 0, "abcde")
+	printProduct(os.Stdout, &Product{1, "laptop", 0, sql.NullString{String: "abcde", Valid: true}})
 
 	//Output:
 	//ID  |Name                      |Price         |Sku                       |
-	//1   |laptop                    |0             |abcde                     |
+	//1   |laptop                    |0.00          |abcde                     |
 
 }
 
 func ExampleCreateProductCorrectOutputWithoutSku() {
-	printProduct(1, "laptop", 0, "")
+	printProduct(os.Stdout, &Product{1, "laptop", 0, sql.NullString{String: "", Valid: false}})
 
 	//Output:
 	//ID  |Name                      |Price         |Sku                       |
-	//1   |laptop                    |0             |                          |
+	//1   |laptop                    |0.00          |                          |
 }
 
 // 3. Command Syntax: `store create-order <customer_id> <product_id>`
@@ -421,13 +450,13 @@ func TestCreateNewOrderMissingCustomerId(t *testing.T) {
 	assert.ErrorContains(t, err, "Must specify product_id and customer_id")
 }
 
-func TestCreateNewOrderCustomerIdIsFloat(t *testing.T) {
+func TestCreateNewOrderCustomerIdIsInt(t *testing.T) {
 
 	err := createOrdersData([][]string{}, [][]string{}, [][]string{{"store", "create-order", "1", "4.5"}})
 	assert.ErrorContains(t, err, "Must be valid integer")
 }
 
-func TestCreateNewOrderProductIdIsFloat(t *testing.T) {
+func TestCreateNewOrderProductIdIsInt(t *testing.T) {
 	err := createOrdersData([][]string{}, [][]string{}, [][]string{{"store", "create-order", "1.5", "4"}})
 	assert.ErrorContains(t, err, "Must be valid integer")
 }
@@ -445,13 +474,11 @@ func TestCreateNewOrderWithValidInputs(t *testing.T) {
 	var createdAt sql.NullString
 	var customerID int
 	var productID int
-	var sku sql.NullString
 
 	rows := db.QueryRow("SELECT * FROM Orders ORDER BY ID DESC LIMIT 1")
-
 	assert.NilError(t, rows.Err())
 
-	err = rows.Scan(&orderID, &createdAt, &customerID, &productID, &sku)
+	err = rows.Scan(&orderID, &createdAt, &customerID, &productID)
 	assert.NilError(t, err)
 	assert.Equal(t, productID, 1)
 	assert.Equal(t, customerID, 1)
@@ -464,7 +491,7 @@ func TestCreateNewOrder_ValidInputs_CustomerForeignKey_Error(t *testing.T) {
 
 	err = createOrdersData([][]string{}, [][]string{{"store", "create-product", "--sku=abcde", "banana", "5"}}, [][]string{{"store", "create-order", "1", "1"}})
 
-	assert.ErrorContains(t, err, "Violates Foreign Key constraints")
+	assert.ErrorContains(t, err, "Customer ID does not exist")
 }
 
 func TestCreateNewOrder_ValidInputs_ProductForeignKey_Error(t *testing.T) {
@@ -473,11 +500,11 @@ func TestCreateNewOrder_ValidInputs_ProductForeignKey_Error(t *testing.T) {
 
 	err = createOrdersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}}, [][]string{}, [][]string{{"store", "create-order", "1", "1"}})
 
-	assert.ErrorContains(t, err, "Violates Foreign Key constraints")
+	assert.ErrorContains(t, err, "Product ID does not exist")
 }
 
 func Example_CreateOrder_WithCorrectOutput() {
-	printOrder(1, 1, 1)
+	printOrder(os.Stdout, &Order{1, sql.NullString{}, 1, 1})
 
 	//Output:
 	//OrderID    |ProductID    |CustomerID    |
@@ -509,11 +536,18 @@ func Example_CreateOrder_WithCorrectOutput() {
 // 2. test output of show-products with name flag
 
 func Example_ShowProductsNoFlag() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
-
-	tearDownProducts()
-	db, _ := connectDB()
-	createProductsDataV2([][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	err := tearDownProducts()
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, err := connectDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	t := &testing.T{}
+	createProductsDataV2(t, [][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowProductCommand(db, ctx),
@@ -522,16 +556,24 @@ func Example_ShowProductsNoFlag() {
 	app.Run([]string{"store", "show-products"})
 	//Output:
 	//ID  |Name                      |Price         |Sku                       |
-	//1   |laptop                    |25            |abcde                     |
-	//2   |book                      |12.5          |bcd                       |
+	//1   |laptop                    |25.00         |abcde                     |
+	//2   |book                      |12.50         |bcd                       |
 }
 
 func Example_ShowProductNameFlag() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
 
-	tearDownProducts()
-	db, _ := connectDB()
-	createProductsDataV2([][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
+	err := tearDownProducts()
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, err := connectDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	t := &testing.T{}
+	createProductsDataV2(t, [][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowProductCommand(db, ctx),
@@ -540,7 +582,7 @@ func Example_ShowProductNameFlag() {
 	app.Run([]string{"store", "show-products", "--name=laptop"})
 	//Output:
 	//ID  |Name                      |Price         |Sku                       |
-	//1   |laptop                    |25            |abcde                     |
+	//1   |laptop                    |25.00         |abcde                     |
 
 }
 
@@ -574,11 +616,18 @@ func Example_ShowProductNameFlag() {
 // 4. test output of show-users with both email and state param
 
 func Example_ShowCustomersNoFlag() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
-
-	tearDownCustomers()
-	db, _ := connectDB()
-	createCustomersDataV2([][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	err := tearDownCustomers()
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, err := connectDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	t := &testing.T{}
+	createCustomersDataV2(t, [][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(db, ctx),
@@ -592,11 +641,18 @@ func Example_ShowCustomersNoFlag() {
 }
 
 func Example_ShowCustomersStateFlag() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
-
-	tearDownCustomers()
-	db, _ := connectDB()
-	createCustomersDataV2([][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	err := tearDownCustomers()
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, err := connectDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	t := &testing.T{}
+	createCustomersDataV2(t, [][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(db, ctx),
@@ -609,11 +665,18 @@ func Example_ShowCustomersStateFlag() {
 }
 
 func Example_ShowCustomersEmailFlag() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
-
-	tearDownCustomers()
-	db, _ := connectDB()
-	createCustomersDataV2([][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	err := tearDownCustomers()
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, err := connectDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	t := &testing.T{}
+	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(db, ctx),
@@ -626,11 +689,18 @@ func Example_ShowCustomersEmailFlag() {
 }
 
 func Example_ShowCustomers_EmailFlag_StateFlag() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
-
-	tearDownCustomers()
-	db, _ := connectDB()
-	createCustomersDataV2([][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}, {"v.s@outreach.io", "WA"}})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	err := tearDownCustomers()
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, err := connectDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	t := &testing.T{}
+	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}, {"v.s@outreach.io", "WA"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(db, ctx),
@@ -677,11 +747,18 @@ Examples:
 // 4. show-orders with both flags
 
 func Example_ShowOrdersNoFlag() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
-
-	tearDownOrders()
-	db, _ := connectDB()
-	createOrdersDataV2([][]int{{1, 1}, {2, 2}})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	err := tearDownOrders()
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, err := connectDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	t := &testing.T{}
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}})
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -696,11 +773,18 @@ func Example_ShowOrdersNoFlag() {
 }
 
 func Example_ShowOrdersCustomerIDFlag() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
-
-	tearDownOrders()
-	db, _ := connectDB()
-	createOrdersDataV2([][]int{{1, 1}, {2, 2}})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	err := tearDownOrders()
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, err := connectDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	t := &testing.T{}
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}})
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -710,17 +794,23 @@ func Example_ShowOrdersCustomerIDFlag() {
 	app.Run([]string{"store", "show-orders", "--customer-id=2"})
 	//Output:
 	//OrderID    |ProductID    |CustomerID    |
-
 	//2          |2            |2             |
 
 }
 
 func Example_ShowOrdersProductIDFlag() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
-
-	tearDownOrders()
-	db, _ := connectDB()
-	createOrdersDataV2([][]int{{1, 1}, {2, 2}})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	err := tearDownOrders()
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, err := connectDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	t := &testing.T{}
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}})
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -735,11 +825,18 @@ func Example_ShowOrdersProductIDFlag() {
 }
 
 func Example_ShowOrdersProductIDFlag_CustomerIDFlag() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
-
-	tearDownOrders()
-	db, _ := connectDB()
-	createOrdersDataV2([][]int{{1, 1}, {2, 2}, {1, 2}})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	err := tearDownOrders()
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, err := connectDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	t := &testing.T{}
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}, {1, 2}})
 
 	app := &cli.App{
 		Commands: []*cli.Command{

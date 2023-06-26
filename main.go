@@ -1,10 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -16,6 +22,95 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/urfave/cli/v2"
 )
+
+type MigrationRunner struct {
+	path string
+}
+
+func NewMigrationRunner(path string) *MigrationRunner {
+	return &MigrationRunner{path: path}
+}
+
+func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int) error {
+	files, err := m.loadMigrationFiles()
+	if err != nil {
+		return err
+	}
+
+	sort.Slice(files, func(i, j int) bool {
+		id1 := extractMigrationID(files[i])
+		id2 := extractMigrationID(files[j])
+
+		return id1 < id2
+	})
+
+	var index int = 0
+	for _, file := range files {
+		if extractMigrationID(file) <= lastRanId {
+			index++
+		}
+	}
+
+	fileSlice := files[index:]
+
+	for _, file := range fileSlice {
+		readFile, err := os.Open(file)
+
+		if err != nil {
+			fmt.Println(err)
+		}
+		fileScanner := bufio.NewScanner(readFile)
+
+		fileScanner.Split(bufio.ScanLines)
+		for fileScanner.Scan() {
+
+			if strings.Trim(fileScanner.Text(), "") == "" {
+				continue
+			}
+			if _, err := conn.ExecContext(ctx, fileScanner.Text()); err != nil {
+				return fmt.Errorf("failed to execute migration %s: %w", file, err)
+			}
+		}
+
+		readFile.Close()
+
+		log.Printf("Executed migration: %s\n", file)
+	}
+
+	return nil
+}
+
+func extractMigrationID(file string) int {
+	regex := regexp.MustCompile(`_(\d+)\.sql$`)
+	matches := regex.FindStringSubmatch(file)
+	if len(matches) != 2 {
+		return -1
+	}
+
+	id, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return -1
+	}
+
+	return id
+}
+
+func (m *MigrationRunner) loadMigrationFiles() ([]string, error) {
+	files, err := ioutil.ReadDir(m.path)
+	if err != nil {
+		return nil, err
+	}
+
+	var migrationFiles []string
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		migrationFiles = append(migrationFiles, filepath.Join(m.path, file.Name()))
+	}
+
+	return migrationFiles, nil
+}
 
 type Customer struct {
 	ID    int
@@ -35,7 +130,6 @@ type Order struct {
 	created_at sql.NullString
 	cID        int
 	pID        int
-	sku        sql.NullString
 }
 
 func NewCustomer(rows *sql.Rows) (*Customer, error) {
@@ -61,13 +155,13 @@ func NewProduct(rows *sql.Rows) (*Product, error) {
 
 func (p *Product) Print(w *tabwriter.Writer) {
 
-	fmt.Fprintf(w, "%-*v\t%-*s\t%-*v\t%-*s\t\n", 3, p.ID, 15, p.name, 13, p.price, 25, p.sku.String)
+	fmt.Fprintf(w, "%-*v\t%-*s\t%-*.2f\t%-*s\t\n", 3, p.ID, 15, p.name, 13, p.price, 25, p.sku.String)
 
 }
 
 func NewOrder(rows *sql.Rows) (*Order, error) {
 	var o Order
-	if err := rows.Scan(&o.ID, &o.created_at, &o.cID, &o.pID, &o.sku); err != nil {
+	if err := rows.Scan(&o.ID, &o.created_at, &o.cID, &o.pID); err != nil {
 		return nil, err
 	}
 	return &o, nil
@@ -156,46 +250,25 @@ func connectDB() (*sql.DB, error) {
 	return db, nil
 }
 
-func printCustomer(customerID int, email string, state string) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
-	c := &Customer{
-		ID:    int(customerID),
-		Email: email,
-		State: state,
-	}
-	var cArr []*Customer
-	cArr = append(cArr, c)
-	customersPrintHelper(cArr, w)
-	w.Flush()
+func printCustomer(w io.Writer, customers ...*Customer) {
+	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
+
+	customersPrintHelper(customers, tw)
+	tw.Flush()
 }
 
-func printOrder(orderID int, cID int, pID int) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
-	o := &Order{
-		ID:         int(orderID),
-		created_at: sql.NullString{String: "", Valid: false},
-		pID:        pID,
-		cID:        cID,
-		sku:        sql.NullString{String: "", Valid: false},
-	}
-	var oArr []*Order
-	oArr = append(oArr, o)
-	orderPrintHelper(oArr, w)
-	w.Flush()
+func printOrder(w io.Writer, orders ...*Order) {
+	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', tabwriter.Debug)
+
+	orderPrintHelper(orders, tw)
+	tw.Flush()
 }
 
-func printProduct(productID int, name string, price float64, sku string) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
-	p := &Product{
-		ID:    int(productID),
-		name:  name,
-		price: price,
-		sku:   sql.NullString{String: sku, Valid: true},
-	}
-	var pArr []*Product
-	pArr = append(pArr, p)
-	productPrintHelper(pArr, w)
-	w.Flush()
+func printProduct(w io.Writer, products ...*Product) {
+	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', tabwriter.Debug)
+
+	productPrintHelper(products, tw)
+	tw.Flush()
 }
 
 func newCreateCustomerCommand(db *sql.DB) *cli.Command {
@@ -226,7 +299,7 @@ func newCreateCustomerCommand(db *sql.DB) *cli.Command {
 			if err != nil {
 				return err
 			}
-			printCustomer(int(customerID), email, state)
+			printCustomer(os.Stdout, &Customer{int(customerID), email, state})
 
 			return nil
 		},
@@ -250,11 +323,17 @@ func newCreateProductCommand(db *sql.DB) *cli.Command {
 
 			name := cCtx.Args().Get(0)
 			price, err := strconv.ParseFloat(cCtx.Args().Get(1), 32)
+			price = (price * 100) / 100
 			if err != nil {
 				return err
 			}
 			sku := cCtx.String("sku")
-			args := []any{}
+
+			p := Product{
+				name:  name,
+				price: price,
+				sku:   sql.NullString{String: sku, Valid: true},
+			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
 			var insertStatement string
@@ -266,14 +345,8 @@ func newCreateProductCommand(db *sql.DB) *cli.Command {
 				insertStatement = "INSERT INTO Products (name, price) VALUES (?, ?)"
 
 			}
-			args = append(args, name, price, sku)
 
-			err = productsInsertHelper(db, args, insertStatement, w)
-			if err != nil {
-				return err
-			}
-
-			return nil
+			return productsInsertHelper(db, p, insertStatement, w)
 
 		},
 	}
@@ -299,13 +372,29 @@ func newCreateOrderCommand(db *sql.DB) *cli.Command {
 			insertStatement := "INSERT INTO Orders (customer_id, product_id) VALUES (?, ?)"
 			res, err := db.Exec(insertStatement, cID, pID)
 			if err != nil {
-				return errors.New("Violates Foreign Key constraints")
+				row := db.QueryRow("SELECT * FROM Customers ORDER BY ID LIMIT 1")
+				var id int
+				var email string
+				var state string
+
+				err := row.Scan(&id, &email, &state)
+				if err != nil {
+					return errors.New("Customer ID does not exist")
+				}
+				log.Print(id)
+				if id < cID {
+					return errors.New("Customer ID does not exist")
+
+				}
+
+				return errors.New("Product ID does not exist")
+
 			}
 			orderID, err := res.LastInsertId()
 			if err != nil {
 				return err
 			}
-			printOrder(int(orderID), cID, pID)
+			printOrder(os.Stdout, &Order{int(orderID), sql.NullString{String: "", Valid: false}, cID, pID})
 
 			return nil
 		},
@@ -343,7 +432,7 @@ func newShowCustomerCommand(db *sql.DB, ctx context.Context) *cli.Command {
 func newShowProductCommand(db *sql.DB, ctx context.Context) *cli.Command {
 	return &cli.Command{
 		Name:  "show-products",
-		Usage: "Shows the proudcts from the products database, optional flag name to filter by name",
+		Usage: "Shows the products from the products database, optional flag name to filter by name",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "name",
@@ -413,10 +502,18 @@ func main() {
 	defer cancel()
 
 	db, err := connectDB()
+
 	if err != nil {
 		log.Fatal("failed to open database:", err)
 	}
-
+	defer db.Close()
+	path := "migrations"
+	runner := NewMigrationRunner(path)
+	conn, _ := db.Conn(ctx)
+	err = runner.Run(context.Background(), conn, -1)
+	if err != nil {
+		log.Fatal(err)
+	}
 	app := &cli.App{
 		Name: "store",
 		Commands: []*cli.Command{
@@ -549,13 +646,13 @@ func customersPrintHelper(customers []*Customer, w *tabwriter.Writer) error {
 	return nil
 }
 
-func productsInsertHelper(db *sql.DB, args []any, statement string, w *tabwriter.Writer) error {
+func productsInsertHelper(db *sql.DB, p Product, statement string, w *tabwriter.Writer) error {
 	var res sql.Result
 	var err error
-	if args[2] != "" {
-		res, err = db.Exec(statement, args[0], args[1], args[2])
+	if p.sku.String != "" {
+		res, err = db.Exec(statement, p.name, p.price, p.sku)
 	} else {
-		res, err = db.Exec(statement, args[0], args[1])
+		res, err = db.Exec(statement, p.name, p.price)
 	}
 	if err != nil {
 		return err
@@ -565,20 +662,8 @@ func productsInsertHelper(db *sql.DB, args []any, statement string, w *tabwriter
 	if err != nil {
 		return err
 	}
-	name, ok := args[0].(string)
-	if !ok {
-		return errors.New("invalid type")
-	}
-	price, ok := args[1].(float64)
-	if !ok {
-		return errors.New("invalid type")
-	}
-	sku, ok := args[2].(string)
-	if !ok {
-		return errors.New("invalid type")
-	}
 
-	printProduct(int(productId), name, price, sku)
+	printProduct(os.Stdout, &Product{int(productId), p.name, p.price, p.sku})
 
 	return nil
 
