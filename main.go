@@ -1,10 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -16,6 +22,92 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/urfave/cli/v2"
 )
+
+type MigrationRunner struct {
+	path string
+}
+
+func NewMigrationRunner(path string) *MigrationRunner {
+	return &MigrationRunner{path: path}
+}
+
+func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int) error {
+	files, err := m.loadMigrationFiles()
+	if err != nil {
+		return err
+	}
+
+	sort.Slice(files, func(i, j int) bool {
+		id1, err := extractMigrationID(files[i])
+		if err != nil {
+			log.Fatal(err)
+		}
+		id2, err := extractMigrationID(files[j])
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		return id1 < id2
+	})
+
+	fileSlice := files[lastRanId+1:]
+
+	for _, file := range fileSlice {
+		readFile, err := os.Open(file)
+		if err != nil {
+			return err
+		}
+		defer readFile.Close()
+		fileScanner := bufio.NewScanner(readFile)
+
+		fileScanner.Split(bufio.ScanLines)
+		for fileScanner.Scan() {
+
+			if strings.Trim(fileScanner.Text(), "") == "" {
+				continue
+			}
+			if _, err := conn.ExecContext(ctx, fileScanner.Text()); err != nil {
+				return fmt.Errorf("failed to execute migration %s: %w", file, err)
+			}
+		}
+		log.Printf("Executed migration: %s\n", file)
+	}
+
+	return nil
+}
+
+func extractMigrationID(file string) (int, error) {
+	regex := regexp.MustCompile(`_(\d+)\.sql$`)
+	matches := regex.FindStringSubmatch(file)
+
+	if len(matches) != 2 {
+		return -1, errors.New("Didn't find match")
+	}
+
+	id, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return -1, errors.New("Couldn't convert to integer")
+	}
+
+	return id, nil
+}
+
+func (m *MigrationRunner) loadMigrationFiles() ([]string, error) {
+	files, err := ioutil.ReadDir(m.path)
+	if err != nil {
+		return nil, err
+	}
+
+	var migrationFiles []string
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		migrationFiles = append(migrationFiles, filepath.Join(m.path, file.Name()))
+	}
+
+	return migrationFiles, nil
+}
 
 type Customer struct {
 	ID    int
@@ -35,7 +127,6 @@ type Order struct {
 	created_at sql.NullString
 	cID        int
 	pID        int
-	sku        sql.NullString
 }
 
 func NewCustomer(rows *sql.Rows) (*Customer, error) {
@@ -48,7 +139,7 @@ func NewCustomer(rows *sql.Rows) (*Customer, error) {
 }
 
 func (c *Customer) Print(w *tabwriter.Writer) {
-	fmt.Fprintf(w, "%d\t%v\t%v\n", c.ID, c.Email, c.State)
+	fmt.Fprintf(w, "%-*v\t%-*s\t%-*s\t\n", 3, c.ID, 50, c.Email, 2, c.State)
 }
 
 func NewProduct(rows *sql.Rows) (*Product, error) {
@@ -60,23 +151,21 @@ func NewProduct(rows *sql.Rows) (*Product, error) {
 }
 
 func (p *Product) Print(w *tabwriter.Writer) {
-	if p.sku.Valid {
-		fmt.Fprintf(w, "%d\t%v\t%v\t%v\t\n", p.ID, p.name, p.price, p.sku.String)
-	} else {
-		fmt.Fprintf(w, "%d\t%v\t%v\t%v\t\n", p.ID, p.name, p.price, "")
-	}
+
+	fmt.Fprintf(w, "%-*v\t%-*s\t%-*.2f\t%-*s\t\n", 3, p.ID, 15, p.name, 13, p.price, 25, p.sku.String)
+
 }
 
 func NewOrder(rows *sql.Rows) (*Order, error) {
 	var o Order
-	if err := rows.Scan(&o.ID, &o.created_at, &o.cID, &o.pID, &o.sku); err != nil {
+	if err := rows.Scan(&o.ID, &o.created_at, &o.cID, &o.pID); err != nil {
 		return nil, err
 	}
 	return &o, nil
 }
 
 func (o *Order) Print(w *tabwriter.Writer) {
-	fmt.Fprintf(w, "%d\t%d\t%d\t\n", o.ID, o.cID, o.pID)
+	fmt.Fprintf(w, "%-*v\t%-*v\t%-*v\t\n", 3, o.ID, 12, o.pID, 13, o.cID)
 }
 
 var states = map[string]bool{
@@ -158,6 +247,27 @@ func connectDB() (*sql.DB, error) {
 	return db, nil
 }
 
+func printCustomer(w io.Writer, customers ...*Customer) {
+	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
+
+	customersPrintHelper(customers, tw)
+	tw.Flush()
+}
+
+func printOrder(w io.Writer, orders ...*Order) {
+	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', tabwriter.Debug)
+
+	orderPrintHelper(orders, tw)
+	tw.Flush()
+}
+
+func printProduct(w io.Writer, products ...*Product) {
+	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', tabwriter.Debug)
+
+	productPrintHelper(products, tw)
+	tw.Flush()
+}
+
 func newCreateCustomerCommand(db *sql.DB) *cli.Command {
 	return &cli.Command{
 		Name:  "create-customer",
@@ -186,11 +296,199 @@ func newCreateCustomerCommand(db *sql.DB) *cli.Command {
 			if err != nil {
 				return err
 			}
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
-			fmt.Fprintln(w, "Customer_id\tEmail\tState\t")
-			fmt.Fprintf(w, "%d\t%s\t%s\t\n", customerID, email, state)
-			w.Flush()
+			printCustomer(os.Stdout, &Customer{int(customerID), email, state})
 
+			return nil
+		},
+	}
+}
+
+func newCreateProductCommand(db *sql.DB) *cli.Command {
+	return &cli.Command{
+		Name:  "create-product",
+		Usage: "Creates a new product to go in the products database, must specify name and price",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "sku",
+				Usage: "the sku of the product",
+			},
+		},
+		Action: func(cCtx *cli.Context) error {
+			if cCtx.NArg() < 2 {
+				return errors.New("Must specify name and price")
+			}
+
+			name := cCtx.Args().Get(0)
+			price, err := strconv.ParseFloat(cCtx.Args().Get(1), 32)
+			price = (price * 100) / 100
+			if err != nil {
+				return err
+			}
+			sku := cCtx.String("sku")
+
+			p := Product{
+				name:  name,
+				price: price,
+				sku:   sql.NullString{String: sku, Valid: true},
+			}
+
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
+			var insertStatement string
+			if sku != "" {
+				insertStatement = "INSERT INTO Products (name, price, sku) VALUES (?, ?, ?)"
+
+			} else {
+
+				insertStatement = "INSERT INTO Products (name, price) VALUES (?, ?)"
+
+			}
+
+			return productsInsertHelper(db, p, insertStatement, w)
+
+		},
+	}
+}
+
+func newCreateOrderCommand(db *sql.DB) *cli.Command {
+	return &cli.Command{
+		Name:      "create-order",
+		Usage:     "Creates a new order to go in the order database, must specify customer_id and product_id",
+		ArgsUsage: "PRODUCT_ID CUSTOMER_ID",
+		Action: func(cCtx *cli.Context) error {
+			if cCtx.NArg() < 2 {
+				return errors.New("Must specify product_id and customer_id")
+			}
+			pID, err := strconv.Atoi(cCtx.Args().Get(0))
+			if err != nil {
+				return errors.New("Must be valid integer")
+			}
+			cID, err := strconv.Atoi(cCtx.Args().Get(1))
+			if err != nil {
+				return errors.New("Must be valid integer")
+			}
+			insertStatement := "INSERT INTO Orders (customer_id, product_id) VALUES (?, ?)"
+			res, err := db.Exec(insertStatement, cID, pID)
+			if err != nil {
+				row := db.QueryRow("SELECT * FROM Customers ORDER BY ID LIMIT 1")
+				var id int
+				var email string
+				var state string
+
+				err := row.Scan(&id, &email, &state)
+				if err != nil {
+					return errors.New("Customer ID does not exist")
+				}
+				log.Print(id)
+				if id < cID {
+					return errors.New("Customer ID does not exist")
+
+				}
+
+				return errors.New("Product ID does not exist")
+
+			}
+			orderID, err := res.LastInsertId()
+			if err != nil {
+				return err
+			}
+			printOrder(os.Stdout, &Order{int(orderID), sql.NullString{String: "", Valid: false}, cID, pID})
+
+			return nil
+		},
+	}
+}
+
+func newShowCustomerCommand(db *sql.DB, ctx context.Context) *cli.Command {
+	return &cli.Command{
+		Name:  "show-customers",
+		Usage: "displays all the customers inside the customers database, optional flags to filter by email and state",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "email",
+				Usage: "the email of the customer",
+			},
+			&cli.StringFlag{
+				Name:  "state",
+				Usage: "the state of the customer",
+			},
+		},
+		Action: func(cCtx *cli.Context) error {
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
+			statement := "SELECT * FROM Customers WHERE Email LIKE CONCAT('%', ?, '%') AND State LIKE CONCAT('%', ?, '%')"
+			email := cCtx.String("email")
+			state := cCtx.String("state")
+			err := customerHelper(w, db, statement, email, state, ctx)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+}
+
+func newShowProductCommand(db *sql.DB, ctx context.Context) *cli.Command {
+	return &cli.Command{
+		Name:  "show-products",
+		Usage: "Shows the products from the products database, optional flag name to filter by name",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "name",
+				Usage: "the name of the product",
+			},
+		},
+		Action: func(cCtx *cli.Context) error {
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
+			statement := "SELECT * FROM PRODUCTS WHERE Name LIKE CONCAT('%', ?, '%')"
+			name := cCtx.String("name")
+			productHelper(w, db, statement, name, ctx)
+			return nil
+		},
+	}
+}
+
+func newShowOrderCommand(db *sql.DB, ctx context.Context) *cli.Command {
+	return &cli.Command{
+		Name:  "show-orders",
+		Usage: "displays all the orders within the orders database with an optional customerId and productId filter",
+		Flags: []cli.Flag{
+			&cli.IntFlag{
+				Name:  "customer-id",
+				Usage: "the customer-id of the customer",
+			},
+			&cli.IntFlag{
+				Name:  "product-id",
+				Usage: "the product-id of the product",
+			},
+		}, Action: func(cCtx *cli.Context) error {
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
+			args := []any{}
+			cID := cCtx.Int("customer-id")
+			pID := cCtx.Int("product-id")
+			var statement string
+			if cCtx.Int("customer-id") != 0 && cCtx.Int("product-id") != 0 {
+
+				statement = "SELECT * FROM ORDERS WHERE customer_id=? AND product_id=?"
+				args = append(args, cID, pID)
+
+			} else if cCtx.Int("customer-id") != 0 {
+
+				statement = "SELECT * FROM ORDERS WHERE customer_id =?"
+				args = append(args, cID)
+
+			} else if cCtx.Int("product-id") != 0 {
+
+				statement = "SELECT * FROM ORDERS WHERE product_id =?"
+				args = append(args, pID)
+
+			} else {
+
+				statement = "SELECT * FROM ORDERS "
+
+			}
+			err := ordersHelper(w, db, statement, args, ctx)
+			if err != nil {
+				return err
+			}
 			return nil
 		},
 	}
@@ -201,185 +499,27 @@ func main() {
 	defer cancel()
 
 	db, err := connectDB()
+
 	if err != nil {
 		log.Fatal("failed to open database:", err)
 	}
-
+	defer db.Close()
+	path := "migrations"
+	runner := NewMigrationRunner(path)
+	conn, _ := db.Conn(ctx)
+	err = runner.Run(context.Background(), conn, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
 	app := &cli.App{
 		Name: "store",
 		Commands: []*cli.Command{
 			newCreateCustomerCommand(db),
-			// {
-			// 	Name:  "create-customer",
-			// 	Usage: "Creates a new customer to go in the customers database, must specify email and state(2 letter code)",
-			// 	Action: func(cCtx *cli.Context) error {
-			// 		return createCustomer(cCtx, db)
-			// 	},
-			// },
-			{
-				Name:  "create-product",
-				Usage: "Creates a new product to go in the products database, must specify name and price",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:  "sku",
-						Usage: "the sku of the product",
-					},
-				},
-				Action: func(cCtx *cli.Context) error {
-					if cCtx.NArg() < 2 {
-						return errors.New("Must specify name and price")
-					}
-
-					name := cCtx.Args().Get(0)
-					price, err := strconv.Atoi(cCtx.Args().Get(1))
-					if err != nil {
-						return err
-					}
-					sku := cCtx.String("sku")
-					args := []any{}
-
-					w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
-					var insertStatement string
-					if sku != "" {
-						insertStatement = "INSERT INTO Products (name, price, sku) VALUES (?, ?, ?)"
-
-					} else {
-
-						insertStatement = "INSERT INTO Products (name, price) VALUES (?, ?)"
-
-					}
-					args = append(args, name, price, sku)
-
-					err = productsInsertHelper(db, args, insertStatement, w)
-					if err != nil {
-						return err
-					}
-
-					return nil
-
-				},
-			},
-			{
-				Name:      "create-order",
-				Usage:     "Creates a new order to go in the order database, must specify customer_id and product_id",
-				ArgsUsage: "PRODUCT_ID CUSTOMER_ID",
-				Action: func(cCtx *cli.Context) error {
-					if len(os.Args) != 4 {
-						return errors.New("Must specify product_id and customer_id")
-					}
-					pID, err := strconv.Atoi(os.Args[2])
-					if err != nil {
-						return err
-					}
-					cID, err := strconv.Atoi(os.Args[3])
-					if err != nil {
-						return err
-					}
-					insertStatement := "INSERT INTO Orders (customer_id, product_id) VALUES (?, ?)"
-					res, err := db.Exec(insertStatement, cID, pID)
-					if err != nil {
-						return err
-					}
-					orderID, err := res.LastInsertId()
-					if err != nil {
-						return err
-					}
-
-					w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
-					fmt.Fprintln(w, "Order_id\tProduct_id\tCustomer_id\t")
-					fmt.Fprintf(w, "%v\t%v\t%v\t\n", orderID, pID, cID)
-					w.Flush()
-
-					return nil
-				},
-			},
-			{
-				Name:  "show-products",
-				Usage: "Shows the proudcts from the products database, optional flag name to filter by name",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:  "name",
-						Usage: "the name of the product",
-					},
-				},
-				Action: func(cCtx *cli.Context) error {
-					w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
-					statement := "SELECT * FROM PRODUCTS WHERE Name LIKE CONCAT('%', ?, '%')"
-					name := cCtx.String("name")
-					productHelper(w, db, statement, name, ctx)
-					return nil
-				},
-			},
-			{
-				Name:  "show-customers",
-				Usage: "displays all the customers inside the customers database, optional flags to filter by email and state",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:  "email",
-						Usage: "the email of the customer",
-					},
-					&cli.StringFlag{
-						Name:  "state",
-						Usage: "the state of the customer",
-					},
-				},
-				Action: func(cCtx *cli.Context) error {
-					w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
-					statement := "SELECT * FROM Customers WHERE Email LIKE CONCAT('%', ?, '%') AND State LIKE CONCAT('%', ?, '%')"
-					email := cCtx.String("email")
-					state := cCtx.String("state")
-					err := customerHelper(w, db, statement, email, state, ctx)
-					if err != nil {
-						return err
-					}
-					return nil
-				},
-			},
-			{
-				Name:  "show-orders",
-				Usage: "displays all the orders within the orders database with an optional customerId and productId filter",
-				Flags: []cli.Flag{
-					&cli.IntFlag{
-						Name:  "customer-id",
-						Usage: "the customer-id of the customer",
-					},
-					&cli.IntFlag{
-						Name:  "product-id",
-						Usage: "the product-id of the product",
-					},
-				}, Action: func(cCtx *cli.Context) error {
-					w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
-					args := []any{}
-					cID := cCtx.Int("customer-id")
-					pID := cCtx.Int("product-id")
-					var statement string
-					if cCtx.Int("customer-id") != 0 && cCtx.Int("product-id") != 0 {
-
-						statement = "SELECT * FROM ORDERS WHERE customer_id=? AND product_id=?"
-						args = append(args, cID, pID)
-
-					} else if cCtx.Int("customer-id") != 0 {
-
-						statement = "SELECT * FROM ORDERS WHERE customer_id =?"
-						args = append(args, cID)
-
-					} else if cCtx.Int("product-id") != 0 {
-
-						statement = "SELECT * FROM ORDERS WHERE product_id =?"
-						args = append(args, pID)
-
-					} else {
-
-						statement = "SELECT * FROM ORDERS "
-
-					}
-					err = ordersHelper(w, db, statement, args, ctx)
-					if err != nil {
-						return err
-					}
-					return nil
-				},
-			},
+			newCreateProductCommand(db),
+			newCreateOrderCommand(db),
+			newShowCustomerCommand(db, ctx),
+			newShowProductCommand(db, ctx),
+			newShowOrderCommand(db, ctx),
 		},
 	}
 
@@ -390,7 +530,7 @@ func main() {
 }
 
 func orderPrintHelper(orders []*Order, w *tabwriter.Writer) error {
-	fmt.Fprintln(w, "Order_ID\tCustomer_ID\tProduct_ID\t")
+	fmt.Fprintf(w, "%-*s\t%-*s\t%-*s\t\n", 10, "OrderID", 12, "ProductID", 13, "CustomerID")
 	for _, o := range orders {
 		o.Print(w)
 	}
@@ -403,7 +543,7 @@ func ordersHelper(w *tabwriter.Writer, db *sql.DB, statement string, args []any,
 	if len(args) == 1 {
 		rows, err = db.QueryContext(ctx, statement, args[0])
 	} else if len(args) == 2 {
-		rows, err = db.QueryContext(ctx, statement, args[1], args[2])
+		rows, err = db.QueryContext(ctx, statement, args[0], args[1])
 	} else {
 		rows, err = db.QueryContext(ctx, statement)
 	}
@@ -432,7 +572,7 @@ func ordersHelper(w *tabwriter.Writer, db *sql.DB, statement string, args []any,
 }
 
 func productPrintHelper(products []*Product, w *tabwriter.Writer) error {
-	fmt.Fprintln(w, "Product_id\tName\tPrice\tSku\t")
+	fmt.Fprintf(w, "%-*s\t%-*s\t%-*s\t%-*s\t\n", 3, "ID", 25, "Name", 13, "Price", 25, "Sku")
 
 	for _, p := range products {
 		p.Print(w)
@@ -496,20 +636,20 @@ func customerHelper(w *tabwriter.Writer, db *sql.DB, statement string, email str
 }
 
 func customersPrintHelper(customers []*Customer, w *tabwriter.Writer) error {
-	fmt.Fprintln(w, "Customer_id\tEmail\tState")
+	fmt.Fprintf(w, "%-*s\t%-*s\t%-*s\t\n", 3, "ID", 50, "Email", 2, "State")
 	for _, c := range customers {
 		c.Print(w)
 	}
 	return nil
 }
 
-func productsInsertHelper(db *sql.DB, args []any, statement string, w *tabwriter.Writer) error {
+func productsInsertHelper(db *sql.DB, p Product, statement string, w *tabwriter.Writer) error {
 	var res sql.Result
 	var err error
-	if args[2] != "" {
-		res, err = db.Exec(statement, args[0], args[1], args[2])
+	if p.sku.String != "" {
+		res, err = db.Exec(statement, p.name, p.price, p.sku)
 	} else {
-		res, err = db.Exec(statement, args[0], args[1])
+		res, err = db.Exec(statement, p.name, p.price)
 	}
 	if err != nil {
 		return err
@@ -520,10 +660,8 @@ func productsInsertHelper(db *sql.DB, args []any, statement string, w *tabwriter
 		return err
 	}
 
-	fmt.Fprintln(w, "Product_id\tName\tPrice\tSku\t")
+	printProduct(os.Stdout, &Product{int(productId), p.name, p.price, p.sku})
 
-	fmt.Fprintf(w, "%d\t%s\t%v\t%v\t\n", productId, args[0], args[1], args[2])
-	w.Flush()
 	return nil
 
 }
