@@ -44,14 +44,14 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 		return id1 < id2
 	})
 
-	var index int = 0
-	for _, file := range files {
-		if extractMigrationID(file) <= lastRanId {
-			index++
-		}
-	}
+	// var index int = 0
+	// for _, file := range files {
+	// 	if extractMigrationID(file) <= lastRanId {
+	// 		index++
+	// 	}
+	// }
 
-	fileSlice := files[index:]
+	fileSlice := files[lastRanId+1:]
 
 	for _, file := range fileSlice {
 		readFile, err := os.Open(file)
@@ -510,7 +510,7 @@ func main() {
 	path := "migrations"
 	runner := NewMigrationRunner(path)
 	conn, _ := db.Conn(ctx)
-	err = runner.Run(context.Background(), conn, -1)
+	err = runner.Run(context.Background(), conn, 0)
 	if err != nil {
 		log.Fatal(err)
 	}
