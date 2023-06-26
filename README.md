@@ -181,7 +181,7 @@ The `MigrationRunner.Run` method should do the following:
 
 
 ### Bonus
-The migration runner should take a 'lastRanID string' parameter, which will only execute the migrations starting from the given id. 
+The migration runner should take a `lastRanID string` parameter, which will only execute the migrations starting from the given id. 
 
 ```go
 func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanID int) error {
@@ -197,17 +197,17 @@ migrations/
     example_0002.sql
 ```
 
-We should expect the following behaviors to execute:
+We should expect the runner to perform the following operations for the given `lastRanIDs`:
 ```go
-// An argument of -1 shows we have not run any migrations yet. 
+// An argument of -1 tells the runner we have not run any migrations yet. 
 // This should run all of the migrations.
 runner.Run(ctx, conn, -1) 
 
-// An argument of 0 shows we last ran migration initial_0000.sql.
+// An argument of 0 tells the runner we last ran migration initial_0000.sql.
 // This should run the remaining migrations (addProductSku_0001.sql and example_0002.sql).
 runner.Run(ctx, conn, 0)
 
-// An argument of 2 shows we last ran migration example_0002.sql.
+// An argument of 2 tells the runner we last ran migration example_0002.sql.
 // This should not run any migrations since example_0002.sql is the latest migration available.
 runner.Run(ctx, conn, 2) 
 ```
