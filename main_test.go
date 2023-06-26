@@ -625,6 +625,23 @@ func Example_ShowCustomersEmailFlag() {
 	//1   |vivek.shah@outreach.io                             |WA    |
 }
 
+func Example_ShowCustomers_EmailFlag_StateFlag() {
+	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
+
+	tearDownCustomers()
+	db, _ := connectDB()
+	createCustomersDataV2([][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}, {"v.s@outreach.io", "WA"}})
+	app := &cli.App{
+		Commands: []*cli.Command{
+			newShowCustomerCommand(db, ctx),
+		},
+	}
+	app.Run([]string{"store", "show-customers", "-state=WA", "--email=vivek"})
+	//Output:
+	//ID  |Email                                              |State |
+	//1   |vivek.shah@outreach.io                             |WA    |
+}
+
 /*
 3. Command Syntax: `store show-orders [--customer-id=<customer_id>] [--product-id=<product_id>]`
 
