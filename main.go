@@ -92,10 +92,13 @@ func (m *MigrationRunner) RunAll(ctx context.Context, orgs []*Org) error {
 		}
 		conn, err := db.Conn(ctx)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
-		m.Run(ctx, conn, org.LastRanMigrationID)
+		err = m.Run(ctx, conn, org.LastRanMigrationID)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
