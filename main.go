@@ -270,8 +270,9 @@ func printProduct(w io.Writer, products ...*Product) {
 
 func newCreateCustomerCommand(db *sql.DB) *cli.Command {
 	return &cli.Command{
-		Name:  "create-customer",
-		Usage: "Creates a new customer to go in the customers database, must specify email and state(2 letter code)",
+		Name:      "create-customer",
+		Usage:     "Creates a new customer to go in the customers database, must specify email and state(2 letter code)",
+		ArgsUsage: "EMAIL STATE",
 		Action: func(cCtx *cli.Context) error {
 			if cCtx.NArg() < 2 {
 				return errors.New("Must specify email and state")
@@ -494,23 +495,29 @@ func newShowOrderCommand(db *sql.DB, ctx context.Context) *cli.Command {
 	}
 }
 
+const lastRanMigrationID = 1
+
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	db, err := connectDB()
-
 	if err != nil {
 		log.Fatal("failed to open database:", err)
 	}
 	defer db.Close()
+
 	path := "migrations"
 	runner := NewMigrationRunner(path)
-	conn, _ := db.Conn(ctx)
-	err = runner.Run(context.Background(), conn, 0)
+	conn, err := db.Conn(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	if err := runner.Run(ctx, conn, lastRanMigrationID); err != nil {
+		log.Fatal(err)
+	}
+
 	app := &cli.App{
 		Name: "store",
 		Commands: []*cli.Command{
