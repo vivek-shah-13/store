@@ -21,13 +21,8 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/urfave/cli/v2"
+	"github.com/vivek-shah-13/store/internal/migration"
 )
-
-type Org struct {
-	Name string
-	// TODO(zpatrick): store and retrieve this on a per-org basis.
-	LastRanMigrationID int
-}
 
 type MigrationRunner struct {
 	path string
@@ -82,25 +77,14 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 	return nil
 }
 
-// RunAll runs migrations for every org in orgs.
-func (m *MigrationRunner) RunAll(ctx context.Context, orgs []*Org) error {
-	for _, org := range orgs {
-		dbName := "store_" + org.Name
-		db, err := connectDB(dbName)
-		if err != nil {
-			return err
-		}
-		conn, err := db.Conn(ctx)
-		if err != nil {
-			return err
-		}
-
-		err = m.Run(ctx, conn, org.LastRanMigrationID)
-		if err != nil {
-			return err
-		}
+// RunAll runs migrations for every org in orgs and then returns the updated migration state.
+func (m *MigrationRunner) RunAll(ctx context.Context, state *migration.MigrationState) (*migration.MigrationState, error) {
+	for _, org := range state.Orgs {
+		// TODO: after each successful migration run, update the org.LastRanMigrationID
+		_ = org
 	}
-	return nil
+
+	return state, nil
 }
 
 func extractMigrationID(file string) (int, error) {
@@ -178,9 +162,7 @@ func NewProduct(rows *sql.Rows) (*Product, error) {
 }
 
 func (p *Product) Print(w *tabwriter.Writer) {
-
 	fmt.Fprintf(w, "%-*v\t%-*s\t%-*.2f\t%-*s\t\n", 3, p.ID, 15, p.name, 13, p.price, 25, p.sku.String)
-
 }
 
 func NewOrder(rows *sql.Rows) (*Order, error) {
@@ -522,11 +504,6 @@ func newShowOrderCommand(db *sql.DB, ctx context.Context) *cli.Command {
 	}
 }
 
-// TODO(zpatrick): populate
-func getAllOrgs(ctx context.Context) ([]*Org, error) {
-	return nil, nil
-}
-
 const lastRanMigrationID = 1
 
 func main() {
@@ -538,17 +515,17 @@ func main() {
 	path := "migrations"
 	runner := NewMigrationRunner(path)
 
-	// TODO(zpatrick): get all orgs
-	// TODO(zpatrick): migrate all orgs on run-migrations call
-	// orgs, err := getAllOrgs(ctx)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	orgs, err := getAllOrgs(ctx)
+	state, err := migration.LoadMigrationState(ctx, migration.DefaultMigrationStatePath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := runner.RunAll(ctx, orgs); err != nil {
+
+	state, err = runner.RunAll(ctx, state)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath); err != nil {
 		log.Fatal(err)
 	}
 
