@@ -23,6 +23,12 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+type Org struct {
+	Name string
+	// TODO(zpatrick): store and retrieve this on a per-org basis.
+	LastRanMigrationID int
+}
+
 type MigrationRunner struct {
 	path string
 }
@@ -73,6 +79,11 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 		log.Printf("Executed migration: %s\n", file)
 	}
 
+	return nil
+}
+
+// RunAll runs migrations for every org in orgs.
+func (m *MigrationRunner) RunAll(ctx context.Context, orgs []*Org) error {
 	return nil
 }
 
@@ -495,6 +506,11 @@ func newShowOrderCommand(db *sql.DB, ctx context.Context) *cli.Command {
 	}
 }
 
+// TODO(zpatrick): populate
+func getAllOrgs(ctx context.Context) ([]*Org, error) {
+	return nil, nil
+}
+
 const lastRanMigrationID = 1
 
 func main() {
@@ -514,12 +530,21 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// TODO(zpatrick): get all orgs
+	// TODO(zpatrick): migrate all orgs on run-migrations call
+	// orgs, err := getAllOrgs(ctx)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
 	if err := runner.Run(ctx, conn, lastRanMigrationID); err != nil {
 		log.Fatal(err)
 	}
 
 	app := &cli.App{
 		Name: "store",
+		// TODO(vivek): before we pass db into these new*Command functions, make sure
+		// we are connected to whichever --org is specified.
 		Commands: []*cli.Command{
 			newCreateCustomerCommand(db),
 			newCreateProductCommand(db),
@@ -533,7 +558,6 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
-
 }
 
 func orderPrintHelper(orders []*Order, w *tabwriter.Writer) error {
