@@ -84,6 +84,19 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 
 // RunAll runs migrations for every org in orgs.
 func (m *MigrationRunner) RunAll(ctx context.Context, orgs []*Org) error {
+	for _, org := range orgs {
+		dbName := "store_" + org.Name
+		db, err := connectDB(dbName)
+		if err != nil {
+			return err
+		}
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		m.Run(ctx, conn, org.LastRanMigrationID)
+	}
 	return nil
 }
 
@@ -238,12 +251,12 @@ var states = map[string]bool{
 	"WY": true,
 }
 
-func connectDB() (*sql.DB, error) {
+func connectDB(name string) (*sql.DB, error) {
 	cfg := mysql.Config{
 		User:   "admin",
 		Passwd: "password123",
 		Addr:   "localhost",
-		DBName: "store",
+		DBName: "store_" + name,
 	}
 
 	db, err := sql.Open("mysql", cfg.FormatDSN())
@@ -517,18 +530,10 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
-	db, err := connectDB()
-	if err != nil {
-		log.Fatal("failed to open database:", err)
-	}
-	defer db.Close()
+	var db *sql.DB
 
 	path := "migrations"
 	runner := NewMigrationRunner(path)
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	// TODO(zpatrick): get all orgs
 	// TODO(zpatrick): migrate all orgs on run-migrations call
@@ -536,8 +541,11 @@ func main() {
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
-
-	if err := runner.Run(ctx, conn, lastRanMigrationID); err != nil {
+	orgs, err := getAllOrgs(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := runner.RunAll(ctx, orgs); err != nil {
 		log.Fatal(err)
 	}
 
