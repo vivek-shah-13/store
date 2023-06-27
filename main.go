@@ -236,12 +236,12 @@ var states = map[string]bool{
 	"WY": true,
 }
 
-func connectDB() (*sql.DB, error) {
+func connectDB(name string) (*sql.DB, error) {
 	cfg := mysql.Config{
 		User:   "admin",
 		Passwd: "password123",
 		Addr:   "localhost",
-		DBName: "store",
+		DBName: "store_" + name,
 	}
 
 	db, err := sql.Open("mysql", cfg.FormatDSN())
@@ -510,11 +510,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
-	db, err := connectDB()
-	if err != nil {
-		log.Fatal("failed to open database:", err)
-	}
-	defer db.Close()
+	var db *sql.DB
 
 	path := "migrations"
 	runner := NewMigrationRunner(path)
