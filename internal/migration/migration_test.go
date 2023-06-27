@@ -65,7 +65,7 @@ func TestSaveMigrationState_willOverwriteExistingData(t *testing.T) {
 		Orgs: []*OrgMigrationState{
 			{
 				Name:               "google",
-				LastRanMigrationID: 1,
+				LastRanMigrationID: 2,
 			},
 		},
 	}
