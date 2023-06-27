@@ -238,12 +238,12 @@ var states = map[string]bool{
 	"WY": true,
 }
 
-func connectDB() (*sql.DB, error) {
+func connectDB(name string) (*sql.DB, error) {
 	cfg := mysql.Config{
 		User:   "admin",
 		Passwd: "password123",
 		Addr:   "localhost",
-		DBName: "store",
+		DBName: "store_" + name,
 	}
 
 	db, err := sql.Open("mysql", cfg.FormatDSN())
@@ -517,18 +517,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
-	db, err := connectDB()
-	if err != nil {
-		log.Fatal("failed to open database:", err)
-	}
-	defer db.Close()
-
-	path := "migrations"
-	runner := NewMigrationRunner(path)
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
+	var db *sql.DB
 
 	// TODO(zpatrick): get all orgs
 	// TODO(zpatrick): migrate all orgs on run-migrations call
@@ -537,12 +526,26 @@ func main() {
 	// 	log.Fatal(err)
 	// }
 
-	if err := runner.Run(ctx, conn, lastRanMigrationID); err != nil {
-		log.Fatal(err)
-	}
-
+	var org string = "default"
 	app := &cli.App{
 		Name: "store",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "org",
+				Value:       "default",
+				Usage:       "org to connect to",
+				Destination: &org,
+			},
+		},
+		Action: func(cCtx *cli.Context) error {
+			db, err := connectDB(org)
+			if err != nil {
+				log.Fatal("failed to open database:", err)
+			}
+			log.Print()
+			defer db.Close()
+			return nil
+		},
 		// TODO(vivek): before we pass db into these new*Command functions, make sure
 		// we are connected to whichever --org is specified.
 		Commands: []*cli.Command{
