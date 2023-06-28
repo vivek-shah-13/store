@@ -518,6 +518,11 @@ func main() {
 	defer cancel()
 
 	var db *sql.DB
+	defer func() {
+		if db != nil {
+			db.Close()
+		}
+	}()
 
 	// TODO(zpatrick): get all orgs
 	// TODO(zpatrick): migrate all orgs on run-migrations call
@@ -541,12 +546,7 @@ func main() {
 			var err error
 			db, err = connectDB(org)
 
-			if err != nil {
-				return err
-			}
-			_ = db
-
-			return nil
+			return err
 		},
 		Commands: []*cli.Command{
 			newCreateCustomerCommand(db),
@@ -561,7 +561,7 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+
 }
 
 func orderPrintHelper(orders []*Order, w *tabwriter.Writer) error {
