@@ -503,6 +503,29 @@ func newShowOrderCommand(db *sql.DB, ctx context.Context) *cli.Command {
 		},
 	}
 }
+func runMigrations(ctx context.Context) *cli.Command {
+	return &cli.Command{
+		Name:  "run-migrations",
+		Usage: "runs migrations for all orgs",
+		Action: func(cCtx *cli.Context) error {
+			path := "migrations"
+			runner := NewMigrationRunner(path)
+
+			state, err := migration.LoadMigrationState(ctx, migration.DefaultMigrationStatePath)
+			if err != nil {
+				return err
+			}
+
+			state, err = runner.RunAll(ctx, state)
+			if err != nil {
+				return err
+			}
+
+			return  migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath)
+		},
+	}
+
+}
 
 const lastRanMigrationID = 1
 
@@ -512,28 +535,12 @@ func main() {
 
 	var db *sql.DB
 
-	path := "migrations"
-	runner := NewMigrationRunner(path)
-
-	state, err := migration.LoadMigrationState(ctx, migration.DefaultMigrationStatePath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	state, err = runner.RunAll(ctx, state)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath); err != nil {
-		log.Fatal(err)
-	}
-
 	app := &cli.App{
 		Name: "store",
 		// TODO(vivek): before we pass db into these new*Command functions, make sure
 		// we are connected to whichever --org is specified.
 		Commands: []*cli.Command{
+			runMigrations(ctx),
 			newCreateCustomerCommand(db),
 			newCreateProductCommand(db),
 			newCreateOrderCommand(db),
