@@ -521,10 +521,7 @@ func runMigrations(ctx context.Context) *cli.Command {
 				return err
 			}
 
-			if err := migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath); err != nil {
-				return err
-			}
-			return nil
+			return  migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath)
 		},
 	}
 
