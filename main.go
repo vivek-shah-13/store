@@ -554,10 +554,37 @@ func main() {
 
 	var db *sql.DB
 
+	defer func() {
+		if db != nil {
+			db.Close()
+		}
+	}()
+
+	// TODO(zpatrick): get all orgs
+	// TODO(zpatrick): migrate all orgs on run-migrations call
+	// orgs, err := getAllOrgs(ctx)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	var org string = "default"
+
 	app := &cli.App{
 		Name: "store",
-		// TODO(vivek): before we pass db into these new*Command functions, make sure
-		// we are connected to whichever --org is specified.
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "org",
+				Value:       "default",
+				Usage:       "org to connect to",
+				Destination: &org,
+			},
+		},
+		Before: func(cCtx *cli.Context) error {
+			var err error
+			db, err = connectDB(org)
+
+			return err
+		},
 		Commands: []*cli.Command{
 			runMigrations(ctx),
 			newCreateCustomerCommand(db),
@@ -572,6 +599,7 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
+
 }
 
 func orderPrintHelper(orders []*Order, w *tabwriter.Writer) error {
