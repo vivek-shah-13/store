@@ -73,7 +73,8 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 			}
 		}
 		log.Printf("Executed migration: %s\n", file)
-		updatedID++
+		updatedID, err = extractMigrationID(file)
+		return updatedID, err
 	}
 
 	return updatedID, nil
