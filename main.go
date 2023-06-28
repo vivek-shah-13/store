@@ -21,13 +21,8 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/urfave/cli/v2"
+	"github.com/vivek-shah-13/store/internal/migration"
 )
-
-type Org struct {
-	Name string
-	// TODO(zpatrick): store and retrieve this on a per-org basis.
-	LastRanMigrationID int
-}
 
 type MigrationRunner struct {
 	path string
@@ -37,10 +32,10 @@ func NewMigrationRunner(path string) *MigrationRunner {
 	return &MigrationRunner{path: path}
 }
 
-func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int) error {
+func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int) (int, error) {
 	files, err := m.loadMigrationFiles()
 	if err != nil {
-		return err
+		return lastRanId, err
 	}
 
 	sort.Slice(files, func(i, j int) bool {
@@ -57,11 +52,12 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 	})
 
 	fileSlice := files[lastRanId+1:]
+	updatedID := lastRanId
 
 	for _, file := range fileSlice {
 		readFile, err := os.Open(file)
 		if err != nil {
-			return err
+			return updatedID, err
 		}
 		defer readFile.Close()
 		fileScanner := bufio.NewScanner(readFile)
@@ -73,18 +69,41 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 				continue
 			}
 			if _, err := conn.ExecContext(ctx, fileScanner.Text()); err != nil {
-				return fmt.Errorf("failed to execute migration %s: %w", file, err)
+				return updatedID, fmt.Errorf("failed to execute migration %s: %w", file, err)
 			}
 		}
 		log.Printf("Executed migration: %s\n", file)
+		updatedID, err = extractMigrationID(file)
+		return updatedID, err
 	}
 
-	return nil
+	return updatedID, nil
 }
 
-// RunAll runs migrations for every org in orgs.
-func (m *MigrationRunner) RunAll(ctx context.Context, orgs []*Org) error {
-	return nil
+// RunAll runs migrations for every org in orgs and then returns the updated migration state.
+func (m *MigrationRunner) RunAll(ctx context.Context, state *migration.MigrationState) (*migration.MigrationState, error) {
+	for _, org := range state.Orgs {
+		// TODO: after each successful migration run, update the org.LastRanMigrationID
+		dbName := "store_" + org.Name
+		db, err := connectDB(dbName)
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer conn.Close()
+		newID, err := m.Run(ctx, conn, org.LastRanMigrationID)
+		if err != nil {
+			return nil, err
+		}
+		org.LastRanMigrationID = newID
+
+	}
+
+	return state, nil
 }
 
 func extractMigrationID(file string) (int, error) {
@@ -162,9 +181,7 @@ func NewProduct(rows *sql.Rows) (*Product, error) {
 }
 
 func (p *Product) Print(w *tabwriter.Writer) {
-
 	fmt.Fprintf(w, "%-*v\t%-*s\t%-*.2f\t%-*s\t\n", 3, p.ID, 15, p.name, 13, p.price, 25, p.sku.String)
-
 }
 
 func NewOrder(rows *sql.Rows) (*Order, error) {
@@ -505,10 +522,28 @@ func newShowOrderCommand(db *sql.DB, ctx context.Context) *cli.Command {
 		},
 	}
 }
+func runMigrations(ctx context.Context) *cli.Command {
+	return &cli.Command{
+		Name:  "run-migrations",
+		Usage: "runs migrations for all orgs",
+		Action: func(cCtx *cli.Context) error {
+			path := "migrations"
+			runner := NewMigrationRunner(path)
 
-// TODO(zpatrick): populate
-func getAllOrgs(ctx context.Context) ([]*Org, error) {
-	return nil, nil
+			state, err := migration.LoadMigrationState(ctx, migration.DefaultMigrationStatePath)
+			if err != nil {
+				return err
+			}
+
+			state, err = runner.RunAll(ctx, state)
+			if err != nil {
+				return err
+			}
+
+			return  migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath)
+		},
+	}
+
 }
 
 const lastRanMigrationID = 1
@@ -518,6 +553,7 @@ func main() {
 	defer cancel()
 
 	var db *sql.DB
+
 	defer func() {
 		if db != nil {
 			db.Close()
@@ -532,6 +568,7 @@ func main() {
 	// }
 
 	var org string = "default"
+
 	app := &cli.App{
 		Name: "store",
 		Flags: []cli.Flag{
@@ -549,6 +586,7 @@ func main() {
 			return err
 		},
 		Commands: []*cli.Command{
+			runMigrations(ctx),
 			newCreateCustomerCommand(db),
 			newCreateProductCommand(db),
 			newCreateOrderCommand(db),
