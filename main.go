@@ -32,10 +32,10 @@ func NewMigrationRunner(path string) *MigrationRunner {
 	return &MigrationRunner{path: path}
 }
 
-func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int) (error, int) {
+func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int) (int, error) {
 	files, err := m.loadMigrationFiles()
 	if err != nil {
-		return err, lastRanId
+		return lastRanId, err
 	}
 
 	sort.Slice(files, func(i, j int) bool {
@@ -57,7 +57,7 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 	for _, file := range fileSlice {
 		readFile, err := os.Open(file)
 		if err != nil {
-			return err, updatedID
+			return updatedID, err
 		}
 		defer readFile.Close()
 		fileScanner := bufio.NewScanner(readFile)
@@ -69,14 +69,14 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 				continue
 			}
 			if _, err := conn.ExecContext(ctx, fileScanner.Text()); err != nil {
-				return fmt.Errorf("failed to execute migration %s: %w", file, err), updatedID
+				return updatedID, fmt.Errorf("failed to execute migration %s: %w", file, err)
 			}
 		}
 		log.Printf("Executed migration: %s\n", file)
 		updatedID++
 	}
 
-	return nil, updatedID
+	return updatedID, nil
 }
 
 // RunAll runs migrations for every org in orgs and then returns the updated migration state.
@@ -88,11 +88,13 @@ func (m *MigrationRunner) RunAll(ctx context.Context, state *migration.Migration
 		if err != nil {
 			return nil, err
 		}
+		defer db.Close()
 		conn, err := db.Conn(ctx)
 		if err != nil {
 			return nil, err
 		}
-		err, newID := m.Run(ctx, conn, org.LastRanMigrationID)
+		defer conn.Close()
+		newID, err := m.Run(ctx, conn, org.LastRanMigrationID)
 		if err != nil {
 			return nil, err
 		}
