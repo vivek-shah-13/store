@@ -537,17 +537,17 @@ func main() {
 				Destination: &org,
 			},
 		},
-		Action: func(cCtx *cli.Context) error {
-			db, err := connectDB(org)
+		Before: func(cCtx *cli.Context) error {
+			var err error
+			db, err = connectDB(org)
+
 			if err != nil {
-				log.Fatal("failed to open database:", err)
+				return err
 			}
-			log.Print()
-			defer db.Close()
+			_ = db
+
 			return nil
 		},
-		// TODO(vivek): before we pass db into these new*Command functions, make sure
-		// we are connected to whichever --org is specified.
 		Commands: []*cli.Command{
 			newCreateCustomerCommand(db),
 			newCreateProductCommand(db),
@@ -561,6 +561,7 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
 }
 
 func orderPrintHelper(orders []*Order, w *tabwriter.Writer) error {
