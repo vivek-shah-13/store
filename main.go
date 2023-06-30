@@ -52,6 +52,7 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 	})
 
 	fileSlice := files[lastRanId+1:]
+	log.Print(fileSlice)
 	updatedID := lastRanId
 
 	for _, file := range fileSlice {
@@ -74,7 +75,7 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 		}
 		log.Printf("Executed migration: %s\n", file)
 		updatedID, err = extractMigrationID(file)
-		return updatedID, err
+
 	}
 
 	return updatedID, nil
@@ -84,8 +85,8 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 func (m *MigrationRunner) RunAll(ctx context.Context, state *migration.MigrationState) (*migration.MigrationState, error) {
 	for _, org := range state.Orgs {
 		// TODO: after each successful migration run, update the org.LastRanMigrationID
-		dbName := "store_" + org.Name
-		db, err := connectDB(dbName)
+
+		db, err := connectDB(org.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -540,19 +541,16 @@ func runMigrations(ctx context.Context) *cli.Command {
 				return err
 			}
 
-			return  migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath)
+			return migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath)
 		},
 	}
 
 }
 
-const lastRanMigrationID = 1
-
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-	defer cancel()
-
 	var db *sql.DB
+	defer cancel()
 
 	defer func() {
 		if db != nil {
@@ -567,23 +565,25 @@ func main() {
 	// 	log.Fatal(err)
 	// }
 
-	var org string = "default"
-
 	app := &cli.App{
 		Name: "store",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:        "org",
-				Value:       "default",
-				Usage:       "org to connect to",
-				Destination: &org,
+				Name:  "org",
+				Usage: "org to connect to",
 			},
 		},
 		Before: func(cCtx *cli.Context) error {
 			var err error
+			org := cCtx.String("org")
+			if org == "" {
+				org = "default"
+			}
 			db, err = connectDB(org)
-
-			return err
+			if err != nil {
+				return err
+			}
+			return nil
 		},
 		Commands: []*cli.Command{
 			runMigrations(ctx),

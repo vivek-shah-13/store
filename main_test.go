@@ -9,11 +9,16 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v2"
+	"github.com/vivek-shah-13/store/internal/migration"
 	"gotest.tools/v3/assert"
 )
 
+var (
+	dbName = "microsoft"
+)
+
 func tearDownCustomers() error {
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		return err
 	}
@@ -30,7 +35,7 @@ func tearDownCustomers() error {
 }
 
 func tearDownProducts() error {
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		return err
 	}
@@ -48,7 +53,7 @@ func tearDownProducts() error {
 
 func tearDownOrders() error {
 
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		return err
 	}
@@ -73,7 +78,7 @@ func tearDownOrders() error {
 }
 
 func createCustomersData(args [][]string) error {
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		return err
 	}
@@ -95,7 +100,7 @@ func createCustomersData(args [][]string) error {
 
 func createCustomersDataV2(t *testing.T, args [][]string) {
 
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +113,7 @@ func createCustomersDataV2(t *testing.T, args [][]string) {
 
 }
 func createProductsData(args [][]string) error {
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		return err
 	}
@@ -129,7 +134,7 @@ func createProductsData(args [][]string) error {
 }
 
 func createProductsDataV2(t *testing.T, args [][]any) {
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +155,7 @@ func createOrdersData(customers [][]string, products [][]string, orders [][]stri
 		return err
 	}
 
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		return err
 	}
@@ -171,7 +176,7 @@ func createOrdersData(customers [][]string, products [][]string, orders [][]stri
 }
 
 func createOrdersDataV2(t *testing.T, args [][]int) {
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +219,6 @@ func createOrdersDataV2(t *testing.T, args [][]int) {
 // 6. When I run it without a state arg: it shoudl return an error
 
 func TestCreateCustomer_withAMissingEmailArg_returnsAnError(t *testing.T) {
-
 	err := createCustomersData([][]string{{"store", "create-customer", "WA"}})
 	assert.ErrorContains(t, err, "Must specify email and state")
 }
@@ -243,7 +247,7 @@ func TestCreateCustomer_withValidInput_entersDatabaseCorrectly(t *testing.T) {
 	assert.NilError(t, err)
 	err = createCustomersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}})
 	assert.NilError(t, err)
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	rows := db.QueryRow("SELECT * FROM Customers ORDER BY ID DESC LIMIT 1")
 
 	assert.NilError(t, rows.Err())
@@ -258,7 +262,7 @@ func TestCreateCustomer_withValidInput_entersDatabaseCorrectly(t *testing.T) {
 }
 
 func TestCreateMultipleCustomer_withValidInput_entersDatabaseCorrectly(t *testing.T) {
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +340,7 @@ func TestCreateProduct_noPrice(t *testing.T) {
 }
 
 func TestCreateProduct_validInputNoSku(t *testing.T) {
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	assert.NilError(t, err)
 	err = tearDownProducts()
 	assert.NilError(t, err)
@@ -358,7 +362,7 @@ func TestCreateProduct_validInputNoSku(t *testing.T) {
 }
 
 func TestCreateProduct_validInputWithSku(t *testing.T) {
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	assert.NilError(t, err)
 
 	err = tearDownProducts()
@@ -381,7 +385,7 @@ func TestCreateProduct_validInputWithSku(t *testing.T) {
 }
 
 func TestCreateProduct_decimalPrice(t *testing.T) {
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	assert.NilError(t, err)
 
 	err = tearDownProducts()
@@ -465,7 +469,7 @@ func TestCreateNewOrderWithValidInputs(t *testing.T) {
 	err := tearDownOrders()
 	assert.NilError(t, err)
 
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	assert.NilError(t, err)
 
 	err = createOrdersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}}, [][]string{{"store", "create-product", "--sku=abcde", "banana", "5"}}, [][]string{{"store", "create-order", "1", "1"}})
@@ -542,7 +546,7 @@ func Example_ShowProductsNoFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -568,7 +572,7 @@ func Example_ShowProductNameFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -622,7 +626,7 @@ func Example_ShowCustomersNoFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -647,7 +651,7 @@ func Example_ShowCustomersStateFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -671,7 +675,7 @@ func Example_ShowCustomersEmailFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -695,7 +699,7 @@ func Example_ShowCustomers_EmailFlag_StateFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -753,7 +757,7 @@ func Example_ShowOrdersNoFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -779,7 +783,7 @@ func Example_ShowOrdersCustomerIDFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -805,7 +809,7 @@ func Example_ShowOrdersProductIDFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -831,7 +835,7 @@ func Example_ShowOrdersProductIDFlag_CustomerIDFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := connectDB()
+	db, err := connectDB(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -848,4 +852,141 @@ func Example_ShowOrdersProductIDFlag_CustomerIDFlag() {
 	//OrderID    |ProductID    |CustomerID    |
 	//3          |2            |1             |
 
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+Testing main.go with multiple orgs
+
+Things to test:
+1. Running migrations - are tables created succesfully in all orgs, with correct columns
+2. Connecting to a specific org
+	a. Org that exists
+	b. Org that doesn't exist
+	c. Default org
+3. All the previous tests on these new orgs, ensuring they are editing the correct databases and not any others
+
+*/
+
+func TestMigrations(t *testing.T) {
+	orgs := []*migration.OrgMigrationState{{Name: "microsoft", LastRanMigrationID: -1}, {Name: "google", LastRanMigrationID: -1}}
+	state := &migration.MigrationState{Orgs: orgs}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath)
+	db, err := connectDB("microsoft")
+	assert.NilError(t, err)
+	_, err = db.Exec("DROP TABLE IF EXISTS Orders, Products, Customers")
+	assert.NilError(t, err)
+
+	db, err = connectDB("google")
+	assert.NilError(t, err)
+	_, err = db.Exec("DROP TABLE IF EXISTS Orders, Products, Customers")
+	assert.NilError(t, err)
+
+	app := &cli.App{
+		Commands: []*cli.Command{
+			runMigrations(ctx),
+		},
+	}
+	app.Run([]string{"store", "run-migrations"})
+	db, err = connectDB("microsoft")
+	assert.NilError(t, err)
+
+	QueryRows(db, t)
+	db, err = connectDB("google")
+	assert.NilError(t, err)
+	QueryRows(db, t)
+
+}
+
+func QueryRows(db *sql.DB, t *testing.T) {
+	_, err := db.Query("SELECT * FROM Orders")
+	assert.NilError(t, err)
+	_, err = db.Query("SELECT * FROM Customers")
+	assert.NilError(t, err)
+	_, err = db.Query("SELECT * FROM Products")
+	assert.NilError(t, err)
+	_, err = db.Query("SELECT sku FROM Products")
+	assert.NilError(t, err)
+}
+
+func runMigrationsHelper(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	app := &cli.App{
+		Commands: []*cli.Command{
+			runMigrations(ctx),
+		},
+	}
+	app.Run([]string{"store", "run-migrations"})
+}
+
+func TestConnectingToDefault(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	app := &cli.App{
+		Commands: []*cli.Command{
+			runMigrations(ctx),
+		},
+	}
+	app.Run([]string{"store", "run-migrations"})
+
+}
+
+func TestConnectingToMicrosoft(t *testing.T) {
+
+}
+
+func TestConnectingToGoogle(t *testing.T) {
+
+}
+
+func Test_SuiteOfTests_Microsoft(t *testing.T) {
+	runMigrationsHelper(t)
+	dbName = "microsoft"
+	RunSuiteOfTests(t)
+}
+
+func Test_SuiteOfTests_Google(t *testing.T) {
+	runMigrationsHelper(t)
+	dbName = "google"
+	RunSuiteOfTests(t)
+}
+
+func Test_SuiteOfTests_Default(t *testing.T) {
+	runMigrationsHelper(t)
+	dbName = "default"
+	RunSuiteOfTests(t)
+}
+
+func RunSuiteOfTests(t *testing.T) {
+	TestCreateCustomer_withAMissingEmailArg_returnsAnError(t)
+	TestCreateCustomer_withAMissingStateArg_returnsAnError(t)
+	TestCreateCustomer_wthAInvalidStateAbbreviation_returnsAnError(t)
+	TestCreateCustomer_withANonTwoLetterStateCode_returnsAnError(t)
+	TestCreateCustomer_withValidInput_entersDatabaseCorrectly(t)
+	TestCreateMultipleCustomer_withValidInput_entersDatabaseCorrectly(t)
+	TestCreateProduct_noName(t)
+	TestCreateProduct_noPrice(t)
+	TestCreateProduct_validInputNoSku(t)
+	TestCreateProduct_validInputWithSku(t)
+	TestCreateProduct_decimalPrice(t)
+	TestCreateNewOrderMissingProductId(t)
+	TestCreateNewOrderMissingCustomerId(t)
+	TestCreateNewOrderCustomerIdIsInt(t)
+	TestCreateNewOrderProductIdIsInt(t)
+	TestCreateNewOrderWithValidInputs(t)
+	TestCreateNewOrder_ValidInputs_CustomerForeignKey_Error(t)
+	TestCreateNewOrder_ValidInputs_ProductForeignKey_Error(t)
+	Example_ShowProductNameFlag()
+	Example_ShowProductsNoFlag()
+	Example_ShowCustomersNoFlag()
+	Example_ShowCustomersStateFlag()
+	Example_ShowCustomersEmailFlag()
+	Example_ShowCustomers_EmailFlag_StateFlag()
+	Example_ShowOrdersNoFlag()
+	Example_ShowOrdersCustomerIDFlag()
+	Example_ShowOrdersProductIDFlag()
+	Example_ShowOrdersProductIDFlag_CustomerIDFlag()
 }
