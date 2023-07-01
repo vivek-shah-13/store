@@ -428,7 +428,7 @@ func newCreateOrderCommand(db *sql.DB) *cli.Command {
 	}
 }
 
-func newShowCustomerCommand(db *sql.DB, ctx context.Context) *cli.Command {
+func newShowCustomerCommand(db **sql.DB, ctx context.Context) *cli.Command {
 	return &cli.Command{
 		Name:  "show-customers",
 		Usage: "displays all the customers inside the customers database, optional flags to filter by email and state",
@@ -447,7 +447,7 @@ func newShowCustomerCommand(db *sql.DB, ctx context.Context) *cli.Command {
 			statement := "SELECT * FROM Customers WHERE Email LIKE CONCAT('%', ?, '%') AND State LIKE CONCAT('%', ?, '%')"
 			email := cCtx.String("email")
 			state := cCtx.String("state")
-			err := customerHelper(w, db, statement, email, state, ctx)
+			err := customerHelper(w, *db, statement, email, state, ctx)
 			if err != nil {
 				return err
 			}
@@ -549,21 +549,14 @@ func runMigrations(ctx context.Context) *cli.Command {
 
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-	var db *sql.DB
 	defer cancel()
 
+	var db *sql.DB
 	defer func() {
 		if db != nil {
 			db.Close()
 		}
 	}()
-
-	// TODO(zpatrick): get all orgs
-	// TODO(zpatrick): migrate all orgs on run-migrations call
-	// orgs, err := getAllOrgs(ctx)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
 
 	app := &cli.App{
 		Name: "store",
@@ -571,18 +564,19 @@ func main() {
 			&cli.StringFlag{
 				Name:  "org",
 				Usage: "org to connect to",
+				Value: "default",
 			},
 		},
 		Before: func(cCtx *cli.Context) error {
-			var err error
 			org := cCtx.String("org")
-			if org == "" {
-				org = "default"
-			}
-			db, err = connectDB(org)
+			log.Println("connecting to org:", org)
+
+			orgDB, err := connectDB(org)
 			if err != nil {
 				return err
 			}
+
+			db = orgDB
 			return nil
 		},
 		Commands: []*cli.Command{
@@ -590,7 +584,7 @@ func main() {
 			newCreateCustomerCommand(db),
 			newCreateProductCommand(db),
 			newCreateOrderCommand(db),
-			newShowCustomerCommand(db, ctx),
+			newShowCustomerCommand(&db, ctx),
 			newShowProductCommand(db, ctx),
 			newShowOrderCommand(db, ctx),
 		},
