@@ -102,20 +102,25 @@ func createCustomersData(args [][]string) error {
 }
 
 func createCustomersDataV2(t *testing.T, args [][]string) {
+	assert.NilError(t, createCustomersDataV3(args))
+}
+
+func createCustomersDataV3(args [][]string) error {
 	db, err := connectDB(dbName)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	defer db.Close()
 
 	for _, val := range args {
 		_, err = db.Exec("INSERT INTO Customers (email, state) VALUES (?, ?)", val[0], val[1])
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
 	}
-
+	return nil
 }
+
 func createProductsData(args [][]string) error {
 	db, err := connectDB(dbName)
 	if err != nil {
@@ -139,19 +144,25 @@ func createProductsData(args [][]string) error {
 }
 
 func createProductsDataV2(t *testing.T, args [][]any) {
+	assert.NilError(t, createProductsDataV3(args))
+}
+
+func createProductsDataV3(args [][]any) error {
 	db, err := connectDB(dbName)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	defer db.Close()
 
 	for _, val := range args {
 		_, err = db.Exec("INSERT INTO Products (name, price, sku) VALUES (?, ?, ?)", val[0], val[1], val[2])
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
 	}
+	return nil
 }
+
 func createOrdersData(customers [][]string, products [][]string, orders [][]string) error {
 	err := createCustomersData(customers)
 	if err != nil {
@@ -185,28 +196,33 @@ func createOrdersData(customers [][]string, products [][]string, orders [][]stri
 }
 
 func createOrdersDataV2(t *testing.T, args [][]int) {
+	assert.NilError(t, createOrdersDataV3(args))
+
+}
+
+func createOrdersDataV3(args [][]int) error {
 	db, err := connectDB(dbName)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	defer db.Close()
 
 	for _, val := range args {
 		_, err = db.Exec("INSERT INTO Customers (email, state) VALUES ('vivek.shah@outreach.io', 'WA')")
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
 		_, err = db.Exec("INSERT INTO Products (name, price, sku) VALUES ('laptop', 25.5, 'abcde')")
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
 		_, err = db.Exec("INSERT INTO Orders (customer_id, product_id) VALUES (?, ?)", val[0], val[1])
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
 
 	}
-
+	return nil
 }
 
 // ### We should have create commands for customers
@@ -572,8 +588,7 @@ func Example_ShowProductsNoFlag() {
 	}
 	defer db.Close()
 
-	t := &testing.T{} // TODO: (zpatrick: probably failng here)
-	createProductsDataV2(t, [][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
+	createProductsDataV3([][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowProductCommand(&db, ctx),
@@ -600,8 +615,7 @@ func Example_ShowProductNameFlag() {
 	}
 	defer db.Close()
 
-	t := &testing.T{}
-	createProductsDataV2(t, [][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
+	createProductsDataV3([][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowProductCommand(&db, ctx),
@@ -656,8 +670,7 @@ func Example_ShowCustomersNoFlag() {
 	}
 	defer db.Close()
 
-	t := &testing.T{}
-	createCustomersDataV2(t, [][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
+	createCustomersDataV3([][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(&db, ctx),
@@ -683,8 +696,7 @@ func Example_ShowCustomersStateFlag() {
 	}
 	defer db.Close()
 
-	t := &testing.T{}
-	createCustomersDataV2(t, [][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
+	createCustomersDataV3([][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(&db, ctx),
@@ -709,8 +721,7 @@ func Example_ShowCustomersEmailFlag() {
 	}
 	defer db.Close()
 
-	t := &testing.T{}
-	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
+	createCustomersDataV3([][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(&db, ctx),
@@ -735,8 +746,7 @@ func Example_ShowCustomers_EmailFlag_StateFlag() {
 	}
 	defer db.Close()
 
-	t := &testing.T{}
-	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}, {"v.s@outreach.io", "WA"}})
+	createCustomersDataV3([][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}, {"v.s@outreach.io", "WA"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(&db, ctx),
@@ -795,8 +805,7 @@ func Example_ShowOrdersNoFlag() {
 	}
 	defer db.Close()
 
-	t := &testing.T{}
-	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}})
+	createOrdersDataV3([][]int{{1, 1}, {2, 2}})
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -823,8 +832,7 @@ func Example_ShowOrdersCustomerIDFlag() {
 	}
 	defer db.Close()
 
-	t := &testing.T{}
-	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}})
+	createOrdersDataV3([][]int{{1, 1}, {2, 2}})
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -851,8 +859,7 @@ func Example_ShowOrdersProductIDFlag() {
 	}
 	defer db.Close()
 
-	t := &testing.T{}
-	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}})
+	createOrdersDataV3([][]int{{1, 1}, {2, 2}})
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -879,8 +886,7 @@ func Example_ShowOrdersProductIDFlag_CustomerIDFlag() {
 	}
 	defer db.Close()
 
-	t := &testing.T{}
-	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}, {1, 2}})
+	createOrdersDataV3([][]int{{1, 1}, {2, 2}, {1, 2}})
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -909,7 +915,7 @@ Things to test:
 */
 
 func TestMigrations(t *testing.T) {
-	orgs := []*migration.OrgMigrationState{{Name: "microsoft", LastRanMigrationID: -1}, {Name: "google", LastRanMigrationID: -1}}
+	orgs := []*migration.OrgMigrationState{{Name: "microsoft", LastRanMigrationID: -1}, {Name: "google", LastRanMigrationID: -1}, {Name: "default", LastRanMigrationID: -1}}
 	state := &migration.MigrationState{Orgs: orgs}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
@@ -970,23 +976,111 @@ func runMigrationsHelper(t *testing.T) {
 }
 
 func TestConnectingToDefault(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-	defer cancel()
+	var db *sql.DB
 	app := &cli.App{
-		Commands: []*cli.Command{
-			runMigrations(ctx),
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "org",
+				Usage: "org to connect to",
+				Value: "default",
+			},
+		},
+		Before: func(cCtx *cli.Context) error {
+			org := cCtx.String("org")
+			log.Println("connecting to org:", org)
+
+			orgDB, err := connectDB(org)
+			if err != nil {
+				return err
+			}
+
+			db = orgDB
+			return nil
 		},
 	}
-	app.Run([]string{"store", "run-migrations"})
-
+	assert.NilError(t, app.Run([]string{"store"}))
+	_ = db
 }
 
 func TestConnectingToMicrosoft(t *testing.T) {
+	var db *sql.DB
+	app := &cli.App{
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "org",
+				Usage: "org to connect to",
+				Value: "default",
+			},
+		},
+		Before: func(cCtx *cli.Context) error {
+			org := cCtx.String("org")
+			log.Println("connecting to org:", org)
 
+			orgDB, err := connectDB(org)
+			if err != nil {
+				return err
+			}
+
+			db = orgDB
+			return nil
+		},
+	}
+	assert.NilError(t, app.Run([]string{"store", "--org=microsoft"}))
+	_ = db
 }
 
 func TestConnectingToGoogle(t *testing.T) {
+	var db *sql.DB
+	app := &cli.App{
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "org",
+				Usage: "org to connect to",
+				Value: "default",
+			},
+		},
+		Before: func(cCtx *cli.Context) error {
+			org := cCtx.String("org")
+			log.Println("connecting to org:", org)
 
+			orgDB, err := connectDB(org)
+			if err != nil {
+				return err
+			}
+
+			db = orgDB
+			return nil
+		},
+	}
+	assert.NilError(t, app.Run([]string{"store", "--org=google"}))
+	_ = db
+}
+
+func TestConnectingToNonExistingDB(t *testing.T) {
+	var db *sql.DB
+	app := &cli.App{
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "org",
+				Usage: "org to connect to",
+				Value: "default",
+			},
+		},
+		Before: func(cCtx *cli.Context) error {
+			org := cCtx.String("org")
+			log.Println("connecting to org:", org)
+
+			orgDB, err := connectDB(org)
+			if err != nil {
+				return err
+			}
+
+			db = orgDB
+			return nil
+		},
+	}
+	assert.ErrorContains(t, app.Run([]string{"store", "--org=abc"}), "Error 1049 (42000): Unknown database 'store_abc'")
+	_ = db
 }
 
 func Test_SuiteOfTests_Microsoft(t *testing.T) {
