@@ -22,6 +22,7 @@ func tearDownCustomers() error {
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
 	_, err = db.Exec("DELETE FROM Customers")
 	if err != nil {
@@ -39,6 +40,7 @@ func tearDownProducts() error {
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
 	_, err = db.Exec("DELETE FROM Products")
 	if err != nil {
@@ -52,11 +54,11 @@ func tearDownProducts() error {
 }
 
 func tearDownOrders() error {
-
 	db, err := connectDB(dbName)
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
 	_, err = db.Exec("DELETE FROM Orders")
 	if err != nil {
@@ -82,6 +84,7 @@ func createCustomersData(args [][]string) error {
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -99,11 +102,12 @@ func createCustomersData(args [][]string) error {
 }
 
 func createCustomersDataV2(t *testing.T, args [][]string) {
-
 	db, err := connectDB(dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer db.Close()
+
 	for _, val := range args {
 		_, err = db.Exec("INSERT INTO Customers (email, state) VALUES (?, ?)", val[0], val[1])
 		if err != nil {
@@ -117,6 +121,7 @@ func createProductsData(args [][]string) error {
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -138,6 +143,8 @@ func createProductsDataV2(t *testing.T, args [][]any) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer db.Close()
+
 	for _, val := range args {
 		_, err = db.Exec("INSERT INTO Products (name, price, sku) VALUES (?, ?, ?)", val[0], val[1], val[2])
 		if err != nil {
@@ -159,6 +166,7 @@ func createOrdersData(customers [][]string, products [][]string, orders [][]stri
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -172,6 +180,7 @@ func createOrdersData(customers [][]string, products [][]string, orders [][]stri
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -180,6 +189,8 @@ func createOrdersDataV2(t *testing.T, args [][]int) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer db.Close()
+
 	for _, val := range args {
 		_, err = db.Exec("INSERT INTO Customers (email, state) VALUES ('vivek.shah@outreach.io', 'WA')")
 		if err != nil {
@@ -248,6 +259,9 @@ func TestCreateCustomer_withValidInput_entersDatabaseCorrectly(t *testing.T) {
 	err = createCustomersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}})
 	assert.NilError(t, err)
 	db, err := connectDB(dbName)
+	assert.NilError(t, err)
+	defer db.Close()
+
 	rows := db.QueryRow("SELECT * FROM Customers ORDER BY ID DESC LIMIT 1")
 
 	assert.NilError(t, rows.Err())
@@ -266,6 +280,7 @@ func TestCreateMultipleCustomer_withValidInput_entersDatabaseCorrectly(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer db.Close()
 
 	err = tearDownCustomers()
 	assert.NilError(t, err)
@@ -342,6 +357,8 @@ func TestCreateProduct_noPrice(t *testing.T) {
 func TestCreateProduct_validInputNoSku(t *testing.T) {
 	db, err := connectDB(dbName)
 	assert.NilError(t, err)
+	defer db.Close()
+
 	err = tearDownProducts()
 	assert.NilError(t, err)
 	err = createProductsData([][]string{{"store", "create-product", "banana", "5"}})
@@ -364,6 +381,7 @@ func TestCreateProduct_validInputNoSku(t *testing.T) {
 func TestCreateProduct_validInputWithSku(t *testing.T) {
 	db, err := connectDB(dbName)
 	assert.NilError(t, err)
+	defer db.Close()
 
 	err = tearDownProducts()
 	assert.NilError(t, err)
@@ -387,6 +405,7 @@ func TestCreateProduct_validInputWithSku(t *testing.T) {
 func TestCreateProduct_decimalPrice(t *testing.T) {
 	db, err := connectDB(dbName)
 	assert.NilError(t, err)
+	defer db.Close()
 
 	err = tearDownProducts()
 	assert.NilError(t, err)
@@ -471,6 +490,7 @@ func TestCreateNewOrderWithValidInputs(t *testing.T) {
 
 	db, err := connectDB(dbName)
 	assert.NilError(t, err)
+	defer db.Close()
 
 	err = createOrdersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}}, [][]string{{"store", "create-product", "--sku=abcde", "banana", "5"}}, [][]string{{"store", "create-order", "1", "1"}})
 
@@ -550,7 +570,9 @@ func Example_ShowProductsNoFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	t := &testing.T{}
+	defer db.Close()
+
+	t := &testing.T{} // TODO: (zpatrick: probably failng here)
 	createProductsDataV2(t, [][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -576,6 +598,8 @@ func Example_ShowProductNameFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
+
 	t := &testing.T{}
 	createProductsDataV2(t, [][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
 	app := &cli.App{
@@ -630,6 +654,8 @@ func Example_ShowCustomersNoFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
+
 	t := &testing.T{}
 	createCustomersDataV2(t, [][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
@@ -655,6 +681,8 @@ func Example_ShowCustomersStateFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
+
 	t := &testing.T{}
 	createCustomersDataV2(t, [][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
@@ -679,6 +707,8 @@ func Example_ShowCustomersEmailFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
+
 	t := &testing.T{}
 	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
@@ -703,6 +733,8 @@ func Example_ShowCustomers_EmailFlag_StateFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
+
 	t := &testing.T{}
 	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}, {"v.s@outreach.io", "WA"}})
 	app := &cli.App{
@@ -761,6 +793,8 @@ func Example_ShowOrdersNoFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
+
 	t := &testing.T{}
 	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}})
 
@@ -787,6 +821,8 @@ func Example_ShowOrdersCustomerIDFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
+
 	t := &testing.T{}
 	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}})
 
@@ -813,6 +849,8 @@ func Example_ShowOrdersProductIDFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
+
 	t := &testing.T{}
 	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}})
 
@@ -839,6 +877,8 @@ func Example_ShowOrdersProductIDFlag_CustomerIDFlag() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
+
 	t := &testing.T{}
 	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}, {1, 2}})
 
@@ -876,11 +916,15 @@ func TestMigrations(t *testing.T) {
 	migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath)
 	db, err := connectDB("microsoft")
 	assert.NilError(t, err)
+	defer db.Close()
+
 	_, err = db.Exec("DROP TABLE IF EXISTS Orders, Products, Customers")
 	assert.NilError(t, err)
 
 	db, err = connectDB("google")
 	assert.NilError(t, err)
+	defer db.Close()
+
 	_, err = db.Exec("DROP TABLE IF EXISTS Orders, Products, Customers")
 	assert.NilError(t, err)
 
@@ -892,10 +936,13 @@ func TestMigrations(t *testing.T) {
 	app.Run([]string{"store", "run-migrations"})
 	db, err = connectDB("microsoft")
 	assert.NilError(t, err)
+	defer db.Close()
 
 	QueryRows(db, t)
 	db, err = connectDB("google")
 	assert.NilError(t, err)
+	defer db.Close()
+
 	QueryRows(db, t)
 
 }
