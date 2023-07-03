@@ -297,7 +297,7 @@ func printProduct(w io.Writer, products ...*Product) {
 	tw.Flush()
 }
 
-func newCreateCustomerCommand(db *sql.DB) *cli.Command {
+func newCreateCustomerCommand(db **sql.DB) *cli.Command {
 	return &cli.Command{
 		Name:      "create-customer",
 		Usage:     "Creates a new customer to go in the customers database, must specify email and state(2 letter code)",
@@ -317,7 +317,7 @@ func newCreateCustomerCommand(db *sql.DB) *cli.Command {
 			}
 
 			insertStatement := "INSERT INTO Customers (email, state) VALUES (?, ?)"
-			res, err := db.Exec(insertStatement, email, state)
+			res, err := (*db).Exec(insertStatement, email, state)
 
 			if err != nil {
 				return err
@@ -333,7 +333,7 @@ func newCreateCustomerCommand(db *sql.DB) *cli.Command {
 	}
 }
 
-func newCreateProductCommand(db *sql.DB) *cli.Command {
+func newCreateProductCommand(db **sql.DB) *cli.Command {
 	return &cli.Command{
 		Name:  "create-product",
 		Usage: "Creates a new product to go in the products database, must specify name and price",
@@ -373,13 +373,13 @@ func newCreateProductCommand(db *sql.DB) *cli.Command {
 
 			}
 
-			return productsInsertHelper(db, p, insertStatement, w)
+			return productsInsertHelper(*db, p, insertStatement, w)
 
 		},
 	}
 }
 
-func newCreateOrderCommand(db *sql.DB) *cli.Command {
+func newCreateOrderCommand(db **sql.DB) *cli.Command {
 	return &cli.Command{
 		Name:      "create-order",
 		Usage:     "Creates a new order to go in the order database, must specify customer_id and product_id",
@@ -397,9 +397,9 @@ func newCreateOrderCommand(db *sql.DB) *cli.Command {
 				return errors.New("Must be valid integer")
 			}
 			insertStatement := "INSERT INTO Orders (customer_id, product_id) VALUES (?, ?)"
-			res, err := db.Exec(insertStatement, cID, pID)
+			res, err := (*db).Exec(insertStatement, cID, pID)
 			if err != nil {
-				row := db.QueryRow("SELECT * FROM Customers ORDER BY ID LIMIT 1")
+				row := (*db).QueryRow("SELECT * FROM Customers ORDER BY ID LIMIT 1")
 				var id int
 				var email string
 				var state string
@@ -456,7 +456,7 @@ func newShowCustomerCommand(db **sql.DB, ctx context.Context) *cli.Command {
 	}
 }
 
-func newShowProductCommand(db *sql.DB, ctx context.Context) *cli.Command {
+func newShowProductCommand(db **sql.DB, ctx context.Context) *cli.Command {
 	return &cli.Command{
 		Name:  "show-products",
 		Usage: "Shows the products from the products database, optional flag name to filter by name",
@@ -470,13 +470,13 @@ func newShowProductCommand(db *sql.DB, ctx context.Context) *cli.Command {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
 			statement := "SELECT * FROM PRODUCTS WHERE Name LIKE CONCAT('%', ?, '%')"
 			name := cCtx.String("name")
-			productHelper(w, db, statement, name, ctx)
+			productHelper(w, *db, statement, name, ctx)
 			return nil
 		},
 	}
 }
 
-func newShowOrderCommand(db *sql.DB, ctx context.Context) *cli.Command {
+func newShowOrderCommand(db **sql.DB, ctx context.Context) *cli.Command {
 	return &cli.Command{
 		Name:  "show-orders",
 		Usage: "displays all the orders within the orders database with an optional customerId and productId filter",
@@ -515,7 +515,7 @@ func newShowOrderCommand(db *sql.DB, ctx context.Context) *cli.Command {
 				statement = "SELECT * FROM ORDERS "
 
 			}
-			err := ordersHelper(w, db, statement, args, ctx)
+			err := ordersHelper(w, *db, statement, args, ctx)
 			if err != nil {
 				return err
 			}
@@ -581,12 +581,12 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			runMigrations(ctx),
-			newCreateCustomerCommand(db),
-			newCreateProductCommand(db),
-			newCreateOrderCommand(db),
+			newCreateCustomerCommand(&db),
+			newCreateProductCommand(&db),
+			newCreateOrderCommand(&db),
 			newShowCustomerCommand(&db, ctx),
-			newShowProductCommand(db, ctx),
-			newShowOrderCommand(db, ctx),
+			newShowProductCommand(&db, ctx),
+			newShowOrderCommand(&db, ctx),
 		},
 	}
 

@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	dbName = "microsoft"
+	dbName = "google"
 )
 
 func tearDownCustomers() error {
@@ -85,7 +85,7 @@ func createCustomersData(args [][]string) error {
 
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newCreateCustomerCommand(db),
+			newCreateCustomerCommand(&db),
 		},
 	}
 
@@ -120,7 +120,7 @@ func createProductsData(args [][]string) error {
 
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newCreateProductCommand(db),
+			newCreateProductCommand(&db),
 		},
 	}
 
@@ -162,7 +162,7 @@ func createOrdersData(customers [][]string, products [][]string, orders [][]stri
 
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newCreateOrderCommand(db),
+			newCreateOrderCommand(&db),
 		},
 	}
 
@@ -554,7 +554,7 @@ func Example_ShowProductsNoFlag() {
 	createProductsDataV2(t, [][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newShowProductCommand(db, ctx),
+			newShowProductCommand(&db, ctx),
 		},
 	}
 	app.Run([]string{"store", "show-products"})
@@ -580,7 +580,7 @@ func Example_ShowProductNameFlag() {
 	createProductsDataV2(t, [][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newShowProductCommand(db, ctx),
+			newShowProductCommand(&db, ctx),
 		},
 	}
 	app.Run([]string{"store", "show-products", "--name=laptop"})
@@ -634,7 +634,7 @@ func Example_ShowCustomersNoFlag() {
 	createCustomersDataV2(t, [][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newShowCustomerCommand(db, ctx),
+			newShowCustomerCommand(&db, ctx),
 		},
 	}
 	app.Run([]string{"store", "show-customers"})
@@ -659,7 +659,7 @@ func Example_ShowCustomersStateFlag() {
 	createCustomersDataV2(t, [][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newShowCustomerCommand(db, ctx),
+			newShowCustomerCommand(&db, ctx),
 		},
 	}
 	app.Run([]string{"store", "show-customers", "--state=WA"})
@@ -683,7 +683,7 @@ func Example_ShowCustomersEmailFlag() {
 	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newShowCustomerCommand(db, ctx),
+			newShowCustomerCommand(&db, ctx),
 		},
 	}
 	app.Run([]string{"store", "show-customers", "--email=outreach"})
@@ -707,7 +707,7 @@ func Example_ShowCustomers_EmailFlag_StateFlag() {
 	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}, {"v.s@outreach.io", "WA"}})
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newShowCustomerCommand(db, ctx),
+			newShowCustomerCommand(&db, ctx),
 		},
 	}
 	app.Run([]string{"store", "show-customers", "-state=WA", "--email=vivek"})
@@ -766,7 +766,7 @@ func Example_ShowOrdersNoFlag() {
 
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newShowOrderCommand(db, ctx),
+			newShowOrderCommand(&db, ctx),
 		},
 	}
 	app.Run([]string{"store", "show-orders"})
@@ -792,7 +792,7 @@ func Example_ShowOrdersCustomerIDFlag() {
 
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newShowOrderCommand(db, ctx),
+			newShowOrderCommand(&db, ctx),
 		},
 	}
 	app.Run([]string{"store", "show-orders", "--customer-id=2"})
@@ -818,7 +818,7 @@ func Example_ShowOrdersProductIDFlag() {
 
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newShowOrderCommand(db, ctx),
+			newShowOrderCommand(&db, ctx),
 		},
 	}
 	app.Run([]string{"store", "show-orders", "--product-id=1"})
@@ -844,7 +844,7 @@ func Example_ShowOrdersProductIDFlag_CustomerIDFlag() {
 
 	app := &cli.App{
 		Commands: []*cli.Command{
-			newShowOrderCommand(db, ctx),
+			newShowOrderCommand(&db, ctx),
 		},
 	}
 	app.Run([]string{"store", "show-orders", "-product-id=2", "--customer-id=1"})
@@ -945,22 +945,22 @@ func TestConnectingToGoogle(t *testing.T) {
 func Test_SuiteOfTests_Microsoft(t *testing.T) {
 	runMigrationsHelper(t)
 	dbName = "microsoft"
-	RunSuiteOfTests(t)
+	Test_RunSuiteOfTests(t)
 }
 
 func Test_SuiteOfTests_Google(t *testing.T) {
 	runMigrationsHelper(t)
 	dbName = "google"
-	RunSuiteOfTests(t)
+	Test_RunSuiteOfTests(t)
 }
 
 func Test_SuiteOfTests_Default(t *testing.T) {
 	runMigrationsHelper(t)
 	dbName = "default"
-	RunSuiteOfTests(t)
+	Test_RunSuiteOfTests(t)
 }
 
-func RunSuiteOfTests(t *testing.T) {
+func Test_RunSuiteOfTests(t *testing.T) {
 	TestCreateCustomer_withAMissingEmailArg_returnsAnError(t)
 	TestCreateCustomer_withAMissingStateArg_returnsAnError(t)
 	TestCreateCustomer_wthAInvalidStateAbbreviation_returnsAnError(t)
