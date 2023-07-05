@@ -52,6 +52,7 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 	})
 
 	fileSlice := files[lastRanId+1:]
+	log.Print(fileSlice)
 	updatedID := lastRanId
 
 	for _, file := range fileSlice {
@@ -74,7 +75,7 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 		}
 		log.Printf("Executed migration: %s\n", file)
 		updatedID, err = extractMigrationID(file)
-		return updatedID, err
+
 	}
 
 	return updatedID, nil
@@ -84,8 +85,8 @@ func (m *MigrationRunner) Run(ctx context.Context, conn *sql.Conn, lastRanId int
 func (m *MigrationRunner) RunAll(ctx context.Context, state *migration.MigrationState) (*migration.MigrationState, error) {
 	for _, org := range state.Orgs {
 		// TODO: after each successful migration run, update the org.LastRanMigrationID
-		dbName := "store_" + org.Name
-		db, err := connectDB(dbName)
+
+		db, err := connectDB(org.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -296,7 +297,7 @@ func printProduct(w io.Writer, products ...*Product) {
 	tw.Flush()
 }
 
-func newCreateCustomerCommand(db *sql.DB) *cli.Command {
+func newCreateCustomerCommand(db **sql.DB) *cli.Command {
 	return &cli.Command{
 		Name:      "create-customer",
 		Usage:     "Creates a new customer to go in the customers database, must specify email and state(2 letter code)",
@@ -316,7 +317,7 @@ func newCreateCustomerCommand(db *sql.DB) *cli.Command {
 			}
 
 			insertStatement := "INSERT INTO Customers (email, state) VALUES (?, ?)"
-			res, err := db.Exec(insertStatement, email, state)
+			res, err := (*db).Exec(insertStatement, email, state)
 
 			if err != nil {
 				return err
@@ -332,7 +333,7 @@ func newCreateCustomerCommand(db *sql.DB) *cli.Command {
 	}
 }
 
-func newCreateProductCommand(db *sql.DB) *cli.Command {
+func newCreateProductCommand(db **sql.DB) *cli.Command {
 	return &cli.Command{
 		Name:  "create-product",
 		Usage: "Creates a new product to go in the products database, must specify name and price",
@@ -372,13 +373,13 @@ func newCreateProductCommand(db *sql.DB) *cli.Command {
 
 			}
 
-			return productsInsertHelper(db, p, insertStatement, w)
+			return productsInsertHelper(*db, p, insertStatement, w)
 
 		},
 	}
 }
 
-func newCreateOrderCommand(db *sql.DB) *cli.Command {
+func newCreateOrderCommand(db **sql.DB) *cli.Command {
 	return &cli.Command{
 		Name:      "create-order",
 		Usage:     "Creates a new order to go in the order database, must specify customer_id and product_id",
@@ -396,9 +397,9 @@ func newCreateOrderCommand(db *sql.DB) *cli.Command {
 				return errors.New("Must be valid integer")
 			}
 			insertStatement := "INSERT INTO Orders (customer_id, product_id) VALUES (?, ?)"
-			res, err := db.Exec(insertStatement, cID, pID)
+			res, err := (*db).Exec(insertStatement, cID, pID)
 			if err != nil {
-				row := db.QueryRow("SELECT * FROM Customers ORDER BY ID LIMIT 1")
+				row := (*db).QueryRow("SELECT * FROM Customers ORDER BY ID LIMIT 1")
 				var id int
 				var email string
 				var state string
@@ -427,7 +428,7 @@ func newCreateOrderCommand(db *sql.DB) *cli.Command {
 	}
 }
 
-func newShowCustomerCommand(db *sql.DB, ctx context.Context) *cli.Command {
+func newShowCustomerCommand(db **sql.DB, ctx context.Context) *cli.Command {
 	return &cli.Command{
 		Name:  "show-customers",
 		Usage: "displays all the customers inside the customers database, optional flags to filter by email and state",
@@ -446,7 +447,7 @@ func newShowCustomerCommand(db *sql.DB, ctx context.Context) *cli.Command {
 			statement := "SELECT * FROM Customers WHERE Email LIKE CONCAT('%', ?, '%') AND State LIKE CONCAT('%', ?, '%')"
 			email := cCtx.String("email")
 			state := cCtx.String("state")
-			err := customerHelper(w, db, statement, email, state, ctx)
+			err := customerHelper(w, *db, statement, email, state, ctx)
 			if err != nil {
 				return err
 			}
@@ -455,7 +456,7 @@ func newShowCustomerCommand(db *sql.DB, ctx context.Context) *cli.Command {
 	}
 }
 
-func newShowProductCommand(db *sql.DB, ctx context.Context) *cli.Command {
+func newShowProductCommand(db **sql.DB, ctx context.Context) *cli.Command {
 	return &cli.Command{
 		Name:  "show-products",
 		Usage: "Shows the products from the products database, optional flag name to filter by name",
@@ -469,13 +470,13 @@ func newShowProductCommand(db *sql.DB, ctx context.Context) *cli.Command {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
 			statement := "SELECT * FROM PRODUCTS WHERE Name LIKE CONCAT('%', ?, '%')"
 			name := cCtx.String("name")
-			productHelper(w, db, statement, name, ctx)
+			productHelper(w, *db, statement, name, ctx)
 			return nil
 		},
 	}
 }
 
-func newShowOrderCommand(db *sql.DB, ctx context.Context) *cli.Command {
+func newShowOrderCommand(db **sql.DB, ctx context.Context) *cli.Command {
 	return &cli.Command{
 		Name:  "show-orders",
 		Usage: "displays all the orders within the orders database with an optional customerId and productId filter",
@@ -514,7 +515,7 @@ func newShowOrderCommand(db *sql.DB, ctx context.Context) *cli.Command {
 				statement = "SELECT * FROM ORDERS "
 
 			}
-			err := ordersHelper(w, db, statement, args, ctx)
+			err := ordersHelper(w, *db, statement, args, ctx)
 			if err != nil {
 				return err
 			}
@@ -540,59 +541,52 @@ func runMigrations(ctx context.Context) *cli.Command {
 				return err
 			}
 
-			return  migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath)
+			return migration.SaveMigrationState(ctx, state, migration.DefaultMigrationStatePath)
 		},
 	}
 
 }
-
-const lastRanMigrationID = 1
 
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	var db *sql.DB
-
 	defer func() {
 		if db != nil {
 			db.Close()
 		}
 	}()
 
-	// TODO(zpatrick): get all orgs
-	// TODO(zpatrick): migrate all orgs on run-migrations call
-	// orgs, err := getAllOrgs(ctx)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	var org string = "default"
-
 	app := &cli.App{
 		Name: "store",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:        "org",
-				Value:       "default",
-				Usage:       "org to connect to",
-				Destination: &org,
+				Name:  "org",
+				Usage: "org to connect to",
+				Value: "default",
 			},
 		},
 		Before: func(cCtx *cli.Context) error {
-			var err error
-			db, err = connectDB(org)
+			org := cCtx.String("org")
+			log.Println("connecting to org:", org)
 
-			return err
+			orgDB, err := connectDB(org)
+			if err != nil {
+				return err
+			}
+
+			db = orgDB
+			return nil
 		},
 		Commands: []*cli.Command{
 			runMigrations(ctx),
-			newCreateCustomerCommand(db),
-			newCreateProductCommand(db),
-			newCreateOrderCommand(db),
-			newShowCustomerCommand(db, ctx),
-			newShowProductCommand(db, ctx),
-			newShowOrderCommand(db, ctx),
+			newCreateCustomerCommand(&db),
+			newCreateProductCommand(&db),
+			newCreateOrderCommand(&db),
+			newShowCustomerCommand(&db, ctx),
+			newShowProductCommand(&db, ctx),
+			newShowOrderCommand(&db, ctx),
 		},
 	}
 

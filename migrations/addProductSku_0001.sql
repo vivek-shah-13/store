@@ -1,1 +1,1 @@
-ALTER TABLE `products` ADD `sku` VARCHAR(255);
+ALTER TABLE `Products` ADD `sku` VARCHAR(255);
