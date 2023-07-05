@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"database/sql"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -17,7 +20,7 @@ var (
 	dbName = "google"
 )
 
-func tearDownCustomers() error {
+func tearDownCustomers(dbName string) error {
 	db, err := connectDB(dbName)
 	if err != nil {
 		return err
@@ -35,7 +38,7 @@ func tearDownCustomers() error {
 	return nil
 }
 
-func tearDownProducts() error {
+func tearDownProducts(dbName string) error {
 	db, err := connectDB(dbName)
 	if err != nil {
 		return err
@@ -53,7 +56,7 @@ func tearDownProducts() error {
 	return nil
 }
 
-func tearDownOrders() error {
+func tearDownOrders(dbName string) error {
 	db, err := connectDB(dbName)
 	if err != nil {
 		return err
@@ -68,18 +71,18 @@ func tearDownOrders() error {
 	if err != nil {
 		return err
 	}
-	err = tearDownCustomers()
+	err = tearDownCustomers(dbName)
 	if err != nil {
 		return err
 	}
-	err = tearDownProducts()
+	err = tearDownProducts(dbName)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func createCustomersData(args [][]string) error {
+func createCustomersData(args [][]string, dbName string) error {
 	db, err := connectDB(dbName)
 	if err != nil {
 		return err
@@ -101,11 +104,11 @@ func createCustomersData(args [][]string) error {
 	return nil
 }
 
-func createCustomersDataV2(t *testing.T, args [][]string) {
-	assert.NilError(t, createCustomersDataV3(args))
+func createCustomersDataV2(t *testing.T, args [][]string, dbName string) {
+	assert.NilError(t, createCustomersDataV3(args, dbName))
 }
 
-func createCustomersDataV3(args [][]string) error {
+func createCustomersDataV3(args [][]string, dbName string) error {
 	db, err := connectDB(dbName)
 	if err != nil {
 		return err
@@ -121,7 +124,7 @@ func createCustomersDataV3(args [][]string) error {
 	return nil
 }
 
-func createProductsData(args [][]string) error {
+func createProductsData(args [][]string, dbName string) error {
 	db, err := connectDB(dbName)
 	if err != nil {
 		return err
@@ -143,11 +146,11 @@ func createProductsData(args [][]string) error {
 	return nil
 }
 
-func createProductsDataV2(t *testing.T, args [][]any) {
-	assert.NilError(t, createProductsDataV3(args))
+func createProductsDataV2(t *testing.T, args [][]any, dbName string) {
+	assert.NilError(t, createProductsDataV3(args, dbName))
 }
 
-func createProductsDataV3(args [][]any) error {
+func createProductsDataV3(args [][]any, dbName string) error {
 	db, err := connectDB(dbName)
 	if err != nil {
 		return err
@@ -163,12 +166,12 @@ func createProductsDataV3(args [][]any) error {
 	return nil
 }
 
-func createOrdersData(customers [][]string, products [][]string, orders [][]string) error {
-	err := createCustomersData(customers)
+func createOrdersData(customers [][]string, products [][]string, orders [][]string, dbName string) error {
+	err := createCustomersData(customers, dbName)
 	if err != nil {
 		return err
 	}
-	err = createProductsData(products)
+	err = createProductsData(products, dbName)
 	if err != nil {
 		return err
 	}
@@ -195,12 +198,12 @@ func createOrdersData(customers [][]string, products [][]string, orders [][]stri
 	return nil
 }
 
-func createOrdersDataV2(t *testing.T, args [][]int) {
-	assert.NilError(t, createOrdersDataV3(args))
+func createOrdersDataV2(t *testing.T, args [][]int, dbName string) {
+	assert.NilError(t, createOrdersDataV3(args, dbName))
 
 }
 
-func createOrdersDataV3(args [][]int) error {
+func createOrdersDataV3(args [][]int, dbName string) error {
 	db, err := connectDB(dbName)
 	if err != nil {
 		return err
@@ -246,33 +249,33 @@ func createOrdersDataV3(args [][]int) error {
 // 6. When I run it without a state arg: it shoudl return an error
 
 func TestCreateCustomer_withAMissingEmailArg_returnsAnError(t *testing.T) {
-	err := createCustomersData([][]string{{"store", "create-customer", "WA"}})
+	err := createCustomersData([][]string{{"store", "create-customer", "WA"}}, dbName)
 	assert.ErrorContains(t, err, "Must specify email and state")
 }
 
 func TestCreateCustomer_withAMissingStateArg_returnsAnError(t *testing.T) {
 
-	err := createCustomersData([][]string{{"store", "create-customer", "vivek.shah@outreach.io"}})
+	err := createCustomersData([][]string{{"store", "create-customer", "vivek.shah@outreach.io"}}, dbName)
 	assert.ErrorContains(t, err, "Must specify email and state")
 }
 
 func TestCreateCustomer_wthAInvalidStateAbbreviation_returnsAnError(t *testing.T) {
 
-	err := createCustomersData([][]string{{"store", "create-customer", "vivek.shah@outreach.io", "PP"}})
+	err := createCustomersData([][]string{{"store", "create-customer", "vivek.shah@outreach.io", "PP"}}, dbName)
 	assert.ErrorContains(t, err, "State must be a valid U.S. State or Territory")
 }
 
 func TestCreateCustomer_withANonTwoLetterStateCode_returnsAnError(t *testing.T) {
 
-	err := createCustomersData([][]string{{"store", "create-customer", "vivek.shah@outreach.io", "PPP"}})
+	err := createCustomersData([][]string{{"store", "create-customer", "vivek.shah@outreach.io", "PPP"}}, dbName)
 	assert.ErrorContains(t, err, "State length must be 2")
 }
 
 func TestCreateCustomer_withValidInput_entersDatabaseCorrectly(t *testing.T) {
 
-	err := tearDownCustomers()
+	err := tearDownCustomers(dbName)
 	assert.NilError(t, err)
-	err = createCustomersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}})
+	err = createCustomersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}}, dbName)
 	assert.NilError(t, err)
 	db, err := connectDB(dbName)
 	assert.NilError(t, err)
@@ -298,9 +301,9 @@ func TestCreateMultipleCustomer_withValidInput_entersDatabaseCorrectly(t *testin
 	}
 	defer db.Close()
 
-	err = tearDownCustomers()
+	err = tearDownCustomers(dbName)
 	assert.NilError(t, err)
-	err = createCustomersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}, {"store", "create-customer", "v.s@outreach.io", "CA"}})
+	err = createCustomersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}, {"store", "create-customer", "v.s@outreach.io", "CA"}}, dbName)
 	assert.NilError(t, err)
 
 	rows := db.QueryRow("SELECT * FROM Customers ORDER BY ID DESC LIMIT 1")
@@ -359,14 +362,14 @@ func Example_CreateMultipleCustomer_hasCorrectPrintOutput() {
 // 6. correct print statement w/ sku
 func TestCreateProduct_noName(t *testing.T) {
 
-	err := createProductsData([][]string{{"store", "create-product", "3.99"}})
+	err := createProductsData([][]string{{"store", "create-product", "3.99"}}, dbName)
 	assert.ErrorContains(t, err, "Must specify name and price")
 
 }
 
 func TestCreateProduct_noPrice(t *testing.T) {
 
-	err := createProductsData([][]string{{"store", "create-product", "banana"}})
+	err := createProductsData([][]string{{"store", "create-product", "banana"}}, dbName)
 	assert.ErrorContains(t, err, "Must specify name and price")
 }
 
@@ -375,9 +378,9 @@ func TestCreateProduct_validInputNoSku(t *testing.T) {
 	assert.NilError(t, err)
 	defer db.Close()
 
-	err = tearDownProducts()
+	err = tearDownProducts(dbName)
 	assert.NilError(t, err)
-	err = createProductsData([][]string{{"store", "create-product", "banana", "5"}})
+	err = createProductsData([][]string{{"store", "create-product", "banana", "5"}}, dbName)
 	assert.NilError(t, err)
 
 	rows := db.QueryRow("SELECT * FROM Products ORDER BY ID DESC LIMIT 1")
@@ -399,9 +402,9 @@ func TestCreateProduct_validInputWithSku(t *testing.T) {
 	assert.NilError(t, err)
 	defer db.Close()
 
-	err = tearDownProducts()
+	err = tearDownProducts(dbName)
 	assert.NilError(t, err)
-	err = createProductsData([][]string{{"store", "create-product", "--sku=abcde", "banana", "5"}})
+	err = createProductsData([][]string{{"store", "create-product", "--sku=abcde", "banana", "5"}}, dbName)
 	assert.NilError(t, err)
 
 	rows := db.QueryRow("SELECT * FROM Products ORDER BY ID DESC LIMIT 1")
@@ -423,9 +426,9 @@ func TestCreateProduct_decimalPrice(t *testing.T) {
 	assert.NilError(t, err)
 	defer db.Close()
 
-	err = tearDownProducts()
+	err = tearDownProducts(dbName)
 	assert.NilError(t, err)
-	err = createProductsData([][]string{{"store", "create-product", "--sku=abcde", "banana", "5.50"}})
+	err = createProductsData([][]string{{"store", "create-product", "--sku=abcde", "banana", "5.50"}}, dbName)
 	assert.NilError(t, err)
 
 	rows := db.QueryRow("SELECT * FROM Products ORDER BY ID DESC LIMIT 1")
@@ -480,35 +483,35 @@ func ExampleCreateProductCorrectOutputWithoutSku() {
 // 8. creating new order with product_id not an integer
 func TestCreateNewOrderMissingProductId(t *testing.T) {
 
-	err := createOrdersData([][]string{}, [][]string{}, [][]string{{"store", "create-order", "1"}})
+	err := createOrdersData([][]string{}, [][]string{}, [][]string{{"store", "create-order", "1"}}, dbName)
 	assert.ErrorContains(t, err, "Must specify product_id and customer_id")
 }
 
 func TestCreateNewOrderMissingCustomerId(t *testing.T) {
-	err := createOrdersData([][]string{}, [][]string{}, [][]string{{"store", "create-order", "12"}})
+	err := createOrdersData([][]string{}, [][]string{}, [][]string{{"store", "create-order", "12"}}, dbName)
 	assert.ErrorContains(t, err, "Must specify product_id and customer_id")
 }
 
 func TestCreateNewOrderCustomerIdIsInt(t *testing.T) {
 
-	err := createOrdersData([][]string{}, [][]string{}, [][]string{{"store", "create-order", "1", "4.5"}})
+	err := createOrdersData([][]string{}, [][]string{}, [][]string{{"store", "create-order", "1", "4.5"}}, dbName)
 	assert.ErrorContains(t, err, "Must be valid integer")
 }
 
 func TestCreateNewOrderProductIdIsInt(t *testing.T) {
-	err := createOrdersData([][]string{}, [][]string{}, [][]string{{"store", "create-order", "1.5", "4"}})
+	err := createOrdersData([][]string{}, [][]string{}, [][]string{{"store", "create-order", "1.5", "4"}}, dbName)
 	assert.ErrorContains(t, err, "Must be valid integer")
 }
 
 func TestCreateNewOrderWithValidInputs(t *testing.T) {
-	err := tearDownOrders()
+	err := tearDownOrders(dbName)
 	assert.NilError(t, err)
 
 	db, err := connectDB(dbName)
 	assert.NilError(t, err)
 	defer db.Close()
 
-	err = createOrdersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}}, [][]string{{"store", "create-product", "--sku=abcde", "banana", "5"}}, [][]string{{"store", "create-order", "1", "1"}})
+	err = createOrdersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}}, [][]string{{"store", "create-product", "--sku=abcde", "banana", "5"}}, [][]string{{"store", "create-order", "1", "1"}}, dbName)
 
 	var orderID int
 	var createdAt sql.NullString
@@ -526,19 +529,19 @@ func TestCreateNewOrderWithValidInputs(t *testing.T) {
 }
 
 func TestCreateNewOrder_ValidInputs_CustomerForeignKey_Error(t *testing.T) {
-	err := tearDownOrders()
+	err := tearDownOrders(dbName)
 	assert.NilError(t, err)
 
-	err = createOrdersData([][]string{}, [][]string{{"store", "create-product", "--sku=abcde", "banana", "5"}}, [][]string{{"store", "create-order", "1", "1"}})
+	err = createOrdersData([][]string{}, [][]string{{"store", "create-product", "--sku=abcde", "banana", "5"}}, [][]string{{"store", "create-order", "1", "1"}}, dbName)
 
 	assert.ErrorContains(t, err, "Customer ID does not exist")
 }
 
 func TestCreateNewOrder_ValidInputs_ProductForeignKey_Error(t *testing.T) {
-	err := tearDownOrders()
+	err := tearDownOrders(dbName)
 	assert.NilError(t, err)
 
-	err = createOrdersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}}, [][]string{}, [][]string{{"store", "create-order", "1", "1"}})
+	err = createOrdersData([][]string{{"store", "create-customer", "vivek.s@outreach.io", "WA"}}, [][]string{}, [][]string{{"store", "create-order", "1", "1"}}, dbName)
 
 	assert.ErrorContains(t, err, "Product ID does not exist")
 }
@@ -578,7 +581,7 @@ func Example_CreateOrder_WithCorrectOutput() {
 func Example_ShowProductsNoFlag() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	err := tearDownProducts()
+	err := tearDownProducts(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -588,7 +591,7 @@ func Example_ShowProductsNoFlag() {
 	}
 	defer db.Close()
 
-	createProductsDataV3([][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
+	createProductsDataV3([][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}}, dbName)
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowProductCommand(&db, ctx),
@@ -605,7 +608,7 @@ func Example_ShowProductNameFlag() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
-	err := tearDownProducts()
+	err := tearDownProducts(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -615,7 +618,7 @@ func Example_ShowProductNameFlag() {
 	}
 	defer db.Close()
 
-	createProductsDataV3([][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}})
+	createProductsDataV3([][]any{{"laptop", 25, "abcde"}, {"book", 12.5, "bcd"}}, dbName)
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowProductCommand(&db, ctx),
@@ -660,7 +663,7 @@ func Example_ShowProductNameFlag() {
 func Example_ShowCustomersNoFlag() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	err := tearDownCustomers()
+	err := tearDownCustomers(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -670,7 +673,7 @@ func Example_ShowCustomersNoFlag() {
 	}
 	defer db.Close()
 
-	createCustomersDataV3([][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
+	createCustomersDataV3([][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}}, dbName)
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(&db, ctx),
@@ -686,7 +689,7 @@ func Example_ShowCustomersNoFlag() {
 func Example_ShowCustomersStateFlag() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	err := tearDownCustomers()
+	err := tearDownCustomers(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -696,7 +699,7 @@ func Example_ShowCustomersStateFlag() {
 	}
 	defer db.Close()
 
-	createCustomersDataV3([][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
+	createCustomersDataV3([][]string{{"vivek.shah@oureach.io", "WA"}, {"vivek.s@outlook.com", "MN"}}, dbName)
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(&db, ctx),
@@ -711,7 +714,7 @@ func Example_ShowCustomersStateFlag() {
 func Example_ShowCustomersEmailFlag() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	err := tearDownCustomers()
+	err := tearDownCustomers(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -721,7 +724,7 @@ func Example_ShowCustomersEmailFlag() {
 	}
 	defer db.Close()
 
-	createCustomersDataV3([][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}})
+	createCustomersDataV3([][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}}, dbName)
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(&db, ctx),
@@ -736,7 +739,7 @@ func Example_ShowCustomersEmailFlag() {
 func Example_ShowCustomers_EmailFlag_StateFlag() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	err := tearDownCustomers()
+	err := tearDownCustomers(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -746,7 +749,7 @@ func Example_ShowCustomers_EmailFlag_StateFlag() {
 	}
 	defer db.Close()
 
-	createCustomersDataV3([][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}, {"v.s@outreach.io", "WA"}})
+	createCustomersDataV3([][]string{{"vivek.shah@outreach.io", "WA"}, {"vivek.s@outlook.com", "MN"}, {"v.s@outreach.io", "WA"}}, dbName)
 	app := &cli.App{
 		Commands: []*cli.Command{
 			newShowCustomerCommand(&db, ctx),
@@ -795,7 +798,7 @@ Examples:
 func Example_ShowOrdersNoFlag() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	err := tearDownOrders()
+	err := tearDownOrders(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -805,7 +808,7 @@ func Example_ShowOrdersNoFlag() {
 	}
 	defer db.Close()
 
-	createOrdersDataV3([][]int{{1, 1}, {2, 2}})
+	createOrdersDataV3([][]int{{1, 1}, {2, 2}}, dbName)
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -822,7 +825,7 @@ func Example_ShowOrdersNoFlag() {
 func Example_ShowOrdersCustomerIDFlag() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	err := tearDownOrders()
+	err := tearDownOrders(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -832,7 +835,7 @@ func Example_ShowOrdersCustomerIDFlag() {
 	}
 	defer db.Close()
 
-	createOrdersDataV3([][]int{{1, 1}, {2, 2}})
+	createOrdersDataV3([][]int{{1, 1}, {2, 2}}, dbName)
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -849,7 +852,7 @@ func Example_ShowOrdersCustomerIDFlag() {
 func Example_ShowOrdersProductIDFlag() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	err := tearDownOrders()
+	err := tearDownOrders(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -859,7 +862,7 @@ func Example_ShowOrdersProductIDFlag() {
 	}
 	defer db.Close()
 
-	createOrdersDataV3([][]int{{1, 1}, {2, 2}})
+	createOrdersDataV3([][]int{{1, 1}, {2, 2}}, dbName)
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -876,7 +879,7 @@ func Example_ShowOrdersProductIDFlag() {
 func Example_ShowOrdersProductIDFlag_CustomerIDFlag() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	err := tearDownOrders()
+	err := tearDownOrders(dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -886,7 +889,7 @@ func Example_ShowOrdersProductIDFlag_CustomerIDFlag() {
 	}
 	defer db.Close()
 
-	createOrdersDataV3([][]int{{1, 1}, {2, 2}, {1, 2}})
+	createOrdersDataV3([][]int{{1, 1}, {2, 2}, {1, 2}}, dbName)
 
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -1130,4 +1133,371 @@ func Test_RunSuiteOfTests(t *testing.T) {
 	Example_ShowOrdersCustomerIDFlag()
 	Example_ShowOrdersProductIDFlag()
 	Example_ShowOrdersProductIDFlag_CustomerIDFlag()
+}
+
+/*
+Testing HTTP Handlers
+For each request, test default org, any other org, values that exist in the database, values that don't exist in the db, error checking
+*/
+
+func TestGetCustomersHandler_DefaultDB_ValidArguments(t *testing.T) {
+	tearDownCustomers("default")
+	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"zack.patrick@outreach.io", "WA"}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/customer?org=&state=WA&email=vivek", nil)
+	w := httptest.NewRecorder()
+	getCustomersHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Email: "+"vivek.shah@outreach.io"+" State: "+"WA"+"\n")
+}
+
+func TestGetCustomersHandler_DefaultDB_ArgsDontExist(t *testing.T) {
+	tearDownCustomers("default")
+	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"zack.patrick@outreach.io", "WA"}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/customer?org=&state=MN&email=vivek123", nil)
+	w := httptest.NewRecorder()
+	getCustomersHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "")
+}
+
+func TestGetCustomersHandler_MicrosoftDB_ValidArguments(t *testing.T) {
+	tearDownCustomers("microsoft")
+	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"zack.patrick@outreach.io", "WA"}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/customer?org=microsoft&state=WA&email=vivek", nil)
+	w := httptest.NewRecorder()
+	getCustomersHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Email: "+"vivek.shah@outreach.io"+" State: "+"WA"+"\n")
+}
+
+func TestGetCustomersHandler_MicrosoftDB_ArgsDontExist(t *testing.T) {
+	tearDownCustomers("microsoft")
+	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"zack.patrick@outreach.io", "WA"}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/customer?org=microsoft&state=MN&email=vivek123", nil)
+	w := httptest.NewRecorder()
+	getCustomersHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "")
+}
+
+func TestGetCustomersByIdHandler_DefaultDB_ValidArgs(t *testing.T) {
+	tearDownCustomers("default")
+	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"zack.patrick@outreach.io", "WA"}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/customer/:1?org=", nil)
+	w := httptest.NewRecorder()
+	getCustomerByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Email: "+"vivek.shah@outreach.io"+" State: "+"WA")
+}
+
+func TestGetCustomersByIdHandler_DefaultDB_ArgsDontExist(t *testing.T) {
+	tearDownCustomers("default")
+	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"zack.patrick@outreach.io", "WA"}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/customer/:3?org=", nil)
+	w := httptest.NewRecorder()
+	getCustomerByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID Does not exist")
+}
+
+func TestGetCustomersByIdHandler_MicrosoftDB_ValidArgs(t *testing.T) {
+	tearDownCustomers("microsoft")
+	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"zack.patrick@outreach.io", "WA"}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/customer/:1?org=microsoft", nil)
+	w := httptest.NewRecorder()
+	getCustomerByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Email: "+"vivek.shah@outreach.io"+" State: "+"WA")
+}
+
+func TestGetCustomersByIdHandler_MicrosoftDB_ArgsDontExist(t *testing.T) {
+	tearDownCustomers("microsoft")
+	createCustomersDataV2(t, [][]string{{"vivek.shah@outreach.io", "WA"}, {"zack.patrick@outreach.io", "WA"}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/customer/:3?org=microsoft", nil)
+	w := httptest.NewRecorder()
+	getCustomerByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID Does not exist")
+}
+
+// Testing Product
+func TestGetProductsHandler_DefaultDB_ValidArguments(t *testing.T) {
+	tearDownProducts("default")
+	createProductsDataV2(t, [][]any{{"laptop", 27.50, "abd"}, {"phone", 17.50, "eiwo"}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/product?org=&name=laptop&sku=a", nil)
+	w := httptest.NewRecorder()
+	getProductsHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Name: "+"laptop"+" Price: "+"27.50"+" Sku: "+"abd"+"\n")
+}
+
+func TestGetProductsHandler_DefaultDB_ArgsDontExist(t *testing.T) {
+	tearDownProducts("default")
+	createProductsDataV2(t, [][]any{{"laptop", 27.50, "abd"}, {"phone", 17.50, "eiwo"}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/product?org=&name=bottle&sku=a", nil)
+	w := httptest.NewRecorder()
+	getProductsHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "")
+}
+
+func TestGetProductsHandler_MicrosoftDB_ValidArguments(t *testing.T) {
+	tearDownProducts("microsoft")
+	createProductsDataV2(t, [][]any{{"laptop", 27.50, "abd"}, {"phone", 17.50, "eiwo"}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/product?org=microsoft&name=laptop&sku=a", nil)
+	w := httptest.NewRecorder()
+	getProductsHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Name: "+"laptop"+" Price: "+"27.50"+" Sku: "+"abd"+"\n")
+}
+
+func TestGetProductsHandler_MicrosoftDB_ArgsDontExist(t *testing.T) {
+	tearDownProducts("microsoft")
+	createProductsDataV2(t, [][]any{{"laptop", 27.50, "abd"}, {"phone", 17.50, "eiwo"}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/product?org=microsoft&name=bottle&sku=a", nil)
+	w := httptest.NewRecorder()
+	getProductsHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "")
+}
+
+func TestGetProductsByIdHandler_DefaultDB_ValidArgs(t *testing.T) {
+	tearDownProducts("default")
+	createProductsDataV2(t, [][]any{{"laptop", 27.50, "abd"}, {"phone", 17.50, "eiwo"}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/product/:1?org=", nil)
+	w := httptest.NewRecorder()
+	getProductByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Name: "+"laptop"+" Price: "+"27.50"+" Sku: "+"abd")
+}
+
+func TestGetProductsByIdHandler_DefaultDB_ArgsDontExist(t *testing.T) {
+	tearDownProducts("default")
+	createProductsDataV2(t, [][]any{{"laptop", 27.50, "abd"}, {"phone", 17.50, "eiwo"}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/product/:4?org=", nil)
+	w := httptest.NewRecorder()
+	getProductByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID Does not exist")
+}
+
+func TestGetProductsByIdHandler_MicrosoftDB_ValidArgs(t *testing.T) {
+	tearDownProducts("microsoft")
+	createProductsDataV2(t, [][]any{{"laptop", 27.50, "abd"}, {"phone", 17.50, "eiwo"}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/product/:1?org=microsoft", nil)
+	w := httptest.NewRecorder()
+	getProductByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Name: "+"laptop"+" Price: "+"27.50"+" Sku: "+"abd")
+}
+
+func TestGetProductsByIdHandler_MicrosoftDB_ArgsDontExist(t *testing.T) {
+	tearDownProducts("microsoft")
+	createProductsDataV2(t, [][]any{{"laptop", 27.50, "abd"}, {"phone", 17.50, "eiwo"}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/product/:4?org=microsoft", nil)
+	w := httptest.NewRecorder()
+	getProductByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID Does not exist")
+}
+
+// Testing Orders
+func TestGetOrdersHandler_DefaultDB_ValidArguments(t *testing.T) {
+	tearDownOrders("default")
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/order?org=&customer_id=1&product_id=1", nil)
+	w := httptest.NewRecorder()
+	getOrdersHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Product_ID: "+"1"+" Customer_ID: "+"1"+"\n")
+}
+
+func TestGetOrdersHandler_DefaultDB_ArgsDontExist(t *testing.T) {
+	tearDownOrders("default")
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/order?org=&customer_id=1&product_id=4", nil)
+	w := httptest.NewRecorder()
+	getOrdersHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "")
+}
+
+func TestGetOrdersHandler_MicrosoftDB_ValidArguments(t *testing.T) {
+	tearDownOrders("microsoft")
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/order?org=microsoft&customer_id=1&product_id=1", nil)
+	w := httptest.NewRecorder()
+	getOrdersHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Product_ID: "+"1"+" Customer_ID: "+"1"+"\n")
+}
+
+func TestGetOrdersHandler_MicrosoftDB_ArgsDontExist(t *testing.T) {
+	tearDownOrders("microsoft")
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/order?org=microsoft&customer_id=1&product_id=4", nil)
+	w := httptest.NewRecorder()
+	getOrdersHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "")
+}
+
+func TestGetOrdersByIdHandler_DefaultDB_ValidArgs(t *testing.T) {
+	tearDownOrders("default")
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/order/:1?org=", nil)
+	w := httptest.NewRecorder()
+	getOrderByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Product_ID: "+"1"+" Customer_ID: "+"1")
+}
+
+func TestGetOrdersByIdHandler_DefaultDB_ArgsDontExist(t *testing.T) {
+	tearDownOrders("default")
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}}, "default")
+	req := httptest.NewRequest(http.MethodGet, "/order/:4?org=", nil)
+	w := httptest.NewRecorder()
+	getOrderByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID Does not exist")
+}
+
+func TestGetOrdersByIdHandler_MicrosoftDB_ValidArgs(t *testing.T) {
+	tearDownOrders("microsoft")
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/order/:1?org=microsoft", nil)
+	w := httptest.NewRecorder()
+	getOrderByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID: "+"1"+" Product_ID: "+"1"+" Customer_ID: "+"1")
+}
+
+func TestGetOrdersByIdHandler_MicrosoftDB_ArgsDontExist(t *testing.T) {
+	tearDownOrders("microsoft")
+	createOrdersDataV2(t, [][]int{{1, 1}, {2, 2}}, "microsoft")
+	req := httptest.NewRequest(http.MethodGet, "/order/:4?org=microsoft", nil)
+	w := httptest.NewRecorder()
+	getOrderByIDHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(data), "ID Does not exist")
 }

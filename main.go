@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -547,9 +548,206 @@ func runMigrations(ctx context.Context) *cli.Command {
 
 }
 
+func getCustomersHandler(w http.ResponseWriter, r *http.Request) {
+
+	org := r.URL.Query().Get("org")
+	state := r.URL.Query().Get("state")
+	email := r.URL.Query().Get("email")
+
+	if org == "" {
+		org = "default"
+	}
+
+	db, err := connectDB(org)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rows, err := db.Query("SELECT * FROM Customers WHERE Email LIKE CONCAT('%', ?, '%') AND State LIKE CONCAT('%', ?, '%')", email, state)
+	defer rows.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var id int
+
+	for rows.Next() {
+		rows.Scan(&id, &email, &state)
+		idStr := strconv.Itoa(id)
+
+		_, err = w.Write([]byte("ID: " + idStr + " Email: " + email + " State: " + state + "\n"))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+	}
+}
+
+func getCustomerByIDHandler(w http.ResponseWriter, r *http.Request) {
+
+	id := r.URL.Path[len("/customer/:"):]
+	org := r.URL.Query().Get("org")
+
+	if org == "" {
+		org = "default"
+	}
+	db, err := connectDB(org)
+	if err != nil {
+		log.Fatal(err)
+	}
+	row := db.QueryRow("SELECT * FROM Customers WHERE ID=?", id)
+
+	var email string
+	var state string
+	row.Scan(&id, &email, &state)
+	if email == "" {
+		w.Write([]byte("ID Does not exist"))
+	} else {
+		_, err = w.Write([]byte("ID: " + id + " Email: " + email + " State: " + state))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func getProductsHandler(w http.ResponseWriter, r *http.Request) {
+	org := r.URL.Query().Get("org")
+	name := r.URL.Query().Get("name")
+	sku := r.URL.Query().Get("sku")
+
+	if org == "" {
+		org = "default"
+	}
+
+	db, err := connectDB(org)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rows, err := db.Query("SELECT * FROM Products WHERE name LIKE CONCAT('%', ?, '%') AND sku LIKE CONCAT('%', ?, '%')", name, sku)
+	defer rows.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var id int
+	var price float64
+
+	for rows.Next() {
+		rows.Scan(&id, &name, &price, &sku)
+		idStr := strconv.Itoa(id)
+		priceStr := strconv.FormatFloat(price, 'f', 2, 64)
+		_, err = w.Write([]byte("ID: " + idStr + " Name: " + name + " Price: " + priceStr + " Sku: " + sku + "\n"))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+	}
+}
+
+func getProductByIDHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse the product ID from the URL path
+	id := r.URL.Path[len("/product/:"):]
+
+	org := r.URL.Query().Get("org")
+
+	if org == "" {
+		org = "default"
+	}
+	db, err := connectDB(org)
+	if err != nil {
+		log.Fatal(err)
+	}
+	row := db.QueryRow("SELECT * FROM Products WHERE ID=?", id)
+	var name string
+	var price float64
+	var sku string
+	row.Scan(&id, &name, &price, &sku)
+	if name == "" {
+		w.Write([]byte("ID Does not exist"))
+	} else {
+		_, err = w.Write([]byte("ID: " + id + " Name: " + name + " Price: " + strconv.FormatFloat(price, 'f', 2, 64) + " Sku: " + sku))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func getOrdersHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse the query parameters
+	org := r.URL.Query().Get("org")
+	productID := r.URL.Query().Get("product_id")
+	customerID := r.URL.Query().Get("customer_id")
+
+	if org == "" {
+		org = "default"
+	}
+
+	db, err := connectDB(org)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rows, err := db.Query("SELECT * FROM Orders WHERE product_id = ? AND customer_id = ?", productID, customerID)
+	defer rows.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var id int
+	var createdAt string
+	for rows.Next() {
+		rows.Scan(&id, &createdAt, &productID, &customerID)
+		idStr := strconv.Itoa(id)
+
+		_, err = w.Write([]byte("ID: " + idStr + " Product_ID: " + productID + " Customer_ID: " + customerID + "\n"))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+	}
+}
+
+func getOrderByIDHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse the order ID from the URL path
+	id := r.URL.Path[len("/order/:"):]
+
+	org := r.URL.Query().Get("org")
+
+	if org == "" {
+		org = "default"
+	}
+	db, err := connectDB(org)
+	if err != nil {
+		log.Fatal(err)
+	}
+	row := db.QueryRow("SELECT * FROM Orders WHERE ID=?", id)
+
+	var product_id int
+	var customer_id int
+	var created_at sql.NullString
+	err = row.Scan(&id, &created_at, &customer_id, &product_id)
+
+	if customer_id == 0 {
+		w.Write([]byte("ID Does not exist"))
+	} else {
+		_, err = w.Write([]byte("ID: " + id + " Product_ID: " + strconv.Itoa(product_id) + " Customer_ID: " + strconv.Itoa(customer_id)))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
+
+	http.HandleFunc("/customer", getCustomersHandler)
+	http.HandleFunc("/customer/", getCustomerByIDHandler)
+	http.HandleFunc("/product", getProductsHandler)
+	http.HandleFunc("/product/", getProductByIDHandler)
+	http.HandleFunc("/order", getOrdersHandler)
+	http.HandleFunc("/order/", getOrderByIDHandler)
+
+	// Start the server
+	http.ListenAndServe(":8080", nil)
 
 	var db *sql.DB
 	defer func() {
