@@ -269,6 +269,58 @@ Create the following HTTP endpoints:
         This should return the order with the given id.
         If org is unset, the default org will be used.
 
-- Each of the endpoints should have unit and integration tests.
-- Use https://ngrok.com/ to expose your application to the public internet.
-  Others should now be able to interact with your website.
+
+* Each of the endpoints should have unit and integration tests.
+* Use https://ngrok.com/ to expose your application to the public internet. 
+Others should now be able to interact with your website. 
+
+
+
+# Refactor
+Cleanup our application code so it is much easier to read, test, and extend. 
+Our application's logic should be split up into separate packages, there should
+be minimal copied code, and our application should be wired together in a cohesive manner. 
+
+Consider adding the following:
+* An abstraction over the data access layer
+* Use a separate package to house mysql-related logic
+* Use a separate package to house http-related logic
+* Use separate package(s) to house domain models/entities: Customers, Orders, and Products
+
+
+# HTTP Client
+Create a new package named `client` which interfaces with your server's API. 
+It should have the following methods:
+
+```go
+func (c *Client) createProduct(ctx context.Context, name string, price float64, sku string) (*Product, error)
+
+func (c *Client) createCustomer(ctx context.Context, name, email string) (*Customer, error)
+
+func (c *Client) createOrder(ctx context.Context, customerID, productID int) (*Order, error)
+
+func (c *Client) showProducts(ctx context.Context, name string) ([]*Product, error)
+
+func (c *Client) showCustomers(ctx context.Context, email, state string) ([]*Customer, error)
+
+func (c *Client) showOrders(ctx context.Context, customerID, productID int) ([]*Order, error)
+```
+
+Each method should create a new http request given the parameters, send said request to your server,
+and return the unmarshalled response. 
+
+BONUS: Unmarshal errors returned by the server and convert them into specific error types (e.g. ErrCustomerDoesNotExist). 
+
+
+Next, wire up each of these client methods to a new top-level `client` cli command. 
+This `client` cli command will basically have the same methods at the main cli app:
+
+```
+store client [--host=localhost] create-product [--sku=SKU] NAME PRICE
+store client [--host=localhost] create-customer EMAIL NAME
+store client [--host=localhost] create-order CUSTOMER_ID PRODUCT_ID
+store client [--host=localhost] show-products [--name=NAME]
+store client [--host=localhost] show-customers [--email=EMAIL] [--STATE=state]
+store client [--host=localhost] show-orders [--customer-id=CUSTOMER_ID] [--product-id=PRODUCT_ID]
+```
+
